@@ -1,32 +1,32 @@
 # Writ
 
-Writ is a Go library that provides a declarative DSL for defining HTTP request pipelines. The DSL handles wiring and orchestration. All implementations are written in Go as functions matching defined signatures.
+Writ is an opinionated Go web framework built around a declarative DSL for defining HTTP request pipelines. The DSL handles wiring and orchestration. All implementations are written in Go as functions matching defined signatures.
 
-Writ is not a framework or a new language. Developers always have the ability to fall back to custom Go code.
+Convention over configuration. Start small, stay small.
 
 **File extension:** `.writ`
 
 ## Core Philosophy
 
 - The DSL describes **what** happens, Go code defines **how**
+- Convention over configuration — predictable structure, naming, and defaults
 - Sensible defaults at system level, opt-in overrides per group or handler
 - More specific declarations win: handler beats group, group beats system
 - `none` keyword explicitly opts out of an inherited default
-- The pipeline never reaches into result types — resolvers own their type knowledge
-- No reflection — type assertions happen inside resolver functions
+- Code generation over reflection — typed resolver chains validated at compile time
 
 ## Pipeline Stages
 
 Every request flows through these stages in order:
 
-1. **limit** — rate limiting, short-circuits with 429
-2. **log** — request logging
-3. **approve** — authorization gate, short-circuits with 401/403
-4. **resolve** — data fetching, one or more steps, may depend on each other
-5. **format** — shapes the resolved data into the response
-6. **error** — handles failures from any stage
-7. **metric** — timing and status tracking
-8. **log** — response logging
+1. **log** — record that this happened
+2. **measure** — instrument it
+3. **limit** — gate by rate, short-circuits with 429
+4. **approve** — gate by permission, short-circuits with 401/403
+5. **resolve** — read data, one or more steps, may depend on each other
+6. **commit** — write data
+7. **format** — shape the response
+8. **log** — record the response
 
 ## DSL Syntax
 
@@ -42,10 +42,9 @@ Every request flows through these stages in order:
 
 system ->
   log request, response
-  metric timing, status
+  measure timing, status
   limit rate.ip(60/min)
   approve auth.authenticated
-  error default error.json
 
 include admin.writ
 include users.writ
@@ -59,10 +58,9 @@ Defines defaults inherited by all handlers. Any step defined here applies everyw
 ```
 system ->
   log request, response
-  metric timing, status
+  measure timing, status
   limit rate.ip(60/min)
   approve auth.authenticated
-  error default error.json
 ```
 
 ### Group Block
@@ -99,7 +97,7 @@ approve none
 
 ### Resolve
 
-Data fetching. Each resolve stores its result by name. Results can be passed as arguments to subsequent resolves.
+Read data. Each resolve stores its result by name. Results can be passed as arguments to subsequent resolves.
 
 ```
 resolve user = db.users(id)
@@ -116,37 +114,67 @@ The reserved keyword `body` provides access to the request body as an `io.ReadCl
 
 ```
 POST /users ->
-  resolve user = parse_user(body)
-  resolve resp = db.users.create(user)
-  format resp user.json
+  resolve input = parse_user(body)
+  commit user = db.users.create(input)
+  format user user.json
 ```
 
-The pipeline never accesses fields on results. When a resolve needs data from a previous result, the entire result object is passed and the resolver function handles field access via type assertion.
+The pipeline never accesses fields on results. When a resolve or commit needs data from a previous step, the entire result object is passed and the function handles field access via type assertion.
 
 Independent resolves with no data dependencies between them are executed in parallel automatically.
+
+### Commit
+
+Write data. Same syntax as resolve, but signals a state mutation. The pipeline can use this distinction for transaction boundaries.
+
+```
+commit user = db.users.create(input)
+commit result = db.users.update(id, input)
+commit result = db.users.delete(id)
+```
+
+Commit results are available to subsequent steps by name, just like resolve results.
 
 ### Format
 
 Two parts: the data to format, and the registered formatter name.
 
 ```
-format user user.show.html
+format user user.show.json
 format user,posts user.show.json
 format status health.json
 ```
 
-Multiple data sources are comma-separated. The formatter name is the registration key — it can encode any convention the developer wants (e.g., `user.show.html`, `user.edit.json`).
+Multiple data sources are comma-separated. The formatter name is the registration key — it can encode any convention the developer wants (e.g., `user.show.json`, `user.list.json`).
 
-### Error
+### Errors
 
-Two parts: the error handler name, and the formatter name for error output.
+Error handling is defined in a separate block, scoped by route pattern. Errors are matched by Go type, with `default` as the catch-all.
 
 ```
-error default error.json
-error profile error.html
+errors /users/* ->
+  DuplicateEmail  conflict.json
+  NotFound        not_found.json
+  Validation      validation.json
+  default         error.json
 ```
 
-The error handler produces data. The formatter shapes it. They are independent of the handler's format step.
+The error block follows the same override model as the rest of the DSL:
+- More specific route patterns win
+- A system-level error block provides defaults
+- Each entry maps a Go error type to a formatter
+
+```
+# system-level default
+errors /* ->
+  default error.json
+
+# more specific handling for user routes
+errors /users/* ->
+  DuplicateEmail  conflict.json
+  Validation      validation.json
+  default         error.json
+```
 
 ### Override Rules
 
@@ -155,11 +183,21 @@ For any given step type, the most specific declaration wins:
 - Group-level overrides system-level
 - `none` explicitly removes an inherited step
 
+## Migrations
+
+First-class database migrations. Details TBD.
+
+## Data Layer
+
+Abstraction for database access with convention-based defaults and raw SQL escape hatch. Details TBD.
+
 ## Open Questions
 
-- Resolve chaining and the `any` type — runtime panics vs compile-time safety
+- Code generation approach — `writ generate` producing typed Go glue code
 - Middleware (CORS, request IDs, compression) — Writ's boundary vs standard Go middleware
-- Source interface shape — CRUD-focused vs more flexible
 - Response status code control (200 vs 201 vs 204)
-- Testing patterns for handlers, resolvers, and full pipelines
+- Data layer design — convention-based ORM vs explicit queries
+- Migration tooling and workflow
+- Testing patterns
 - Configuration management (env vars, secrets, connection strings)
+- HTML rendering approach (future)
