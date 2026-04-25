@@ -71,6 +71,17 @@ See [constitution.md](constitution.md) — guiding principles, development pipel
 
 -->
 
+## DSL Boundaries
+
+The Writ DSL (`.writ` files) describes request flow only — pipeline stages (`resolve`, `commit`, `approve`, `format`, `error`, `log`, `metric`, `limit`) and the handler, group, and system blocks that compose them. Data shape (models, record types, field constraints) and component wiring (sources, resolvers, formatters, approvers, error handlers) are declared in Go and referenced from the DSL by name.
+
+When designing a new Writ feature, ask: does this describe request flow? If yes, it can live in the DSL. If it describes data shape, validation rules, or component registration, put it in the Go API and have the DSL reference it by name.
+
+## Spec Conventions
+
+- Writ feature specs include **both** DSL reference forms and representative Go registration samples, paired so the binding between a Go registration and its DSL name is visible. Writ's public contract is its Go API plus the DSL; excluding Go from specs makes them ambiguous. This is a project-specific refinement of the constitution's general guidance against language-specific code in specs.
+- Go samples in specs are contract illustrations, not finalized signatures — exact spellings of types, fields, and options are refined in the plan phase.
+
 ## Boundaries
 
 - Before working on any spec beyond its spec.md, verify all dependency specs have status `done`. If any dependency is not done, work on the earliest incomplete dependency instead.
