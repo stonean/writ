@@ -1,100 +1,107 @@
 # Errors
 
-<!-- This is a living document describing your project's error handling conventions.
-     Establish the core format and conventions early, then add error codes
-     as modules are built. -->
+Writ's error handling is built around three pieces:
 
-## Error Response Format
+1. **Typed Go errors** that carry their own HTTP status via a `StatusCode()` method.
+2. **`errors /pattern ->` blocks** in the DSL that map error types to formatters, scoped by route prefix.
+3. **The pipeline's `format` machinery**, reused to render the error response.
 
-<!-- The standard structure for error responses. Example:
+This document captures the conventions every error must follow. Specific error types belong to the feature that defines them.
 
-All error responses use a consistent JSON envelope:
+## Typed Errors
 
-```json
-{
-  "error": {
-    "code": "validation_failed",
-    "message": "One or more fields are invalid.",
-    "details": []
-  }
-}
+Errors are ordinary Go types. A type carries its HTTP status by implementing `StatusCode() int`:
+
+```go
+type NotFound struct{ Resource string }
+func (e NotFound) StatusCode() int { return 404 }
+
+type Validation struct{ Fields map[string]string }
+func (e Validation) StatusCode() int { return 422 }
+
+type DuplicateEmail struct{ Email string }
+func (e DuplicateEmail) StatusCode() int { return 409 }
+
+type Unauthorized struct{ Message string }
+func (e Unauthorized) StatusCode() int { return 401 }
 ```
 
-The `details` array is optional and used for validation errors (see below).
-
--->
-
-## Error Codes
-
-<!-- Naming convention for error codes and a registry of codes in use. Example:
-
-Error codes use `snake_case` and follow the pattern `{category}_{description}`.
-
-| Code | Category | Meaning |
-| --- | --- | --- |
-| `auth_token_expired` | auth | Access token has expired |
-| `validation_failed` | validation | Request body failed validation |
-| `not_found` | resource | Requested resource does not exist |
-
--->
+If a returned error does not implement `StatusCode()`, the pipeline defaults the response to `500`.
 
 ## Status Mapping
 
-<!-- How error codes map to response status codes or equivalent. Example:
+Outside of typed errors, the pipeline assigns status codes from context:
 
-| Category | Status Code |
+| Outcome | Status |
 | --- | --- |
-| `auth_*` | 401 |
-| `forbidden_*` | 403 |
-| `not_found` | 404 |
-| `validation_*` | 422 |
-| `rate_*` | 429 |
-| `internal_*` | 500 |
+| Successful resolve + format | 200 |
+| Successful commit + format | 201 |
+| Successful delete commit | 204 |
+| Redirect after commit | 303 See Other |
+| Redirect without commit | 302 Found |
+| Approve failure | 401 or 403 |
+| Limit failure | 429 |
+| CSRF failure | 403 |
+| Validation failure | from the error's `StatusCode()` (typically 422) |
+| Other typed error | from the error's `StatusCode()` |
+| Untyped error | 500 |
 
--->
+A formatter can override the success code with `writ.SetStatus(ctx, code)`.
+
+## Errors Block
+
+The DSL `errors` block scopes type-to-formatter mappings by route pattern:
+
+```text
+errors /* ->
+  default error.json
+
+errors /users/* ->
+  DuplicateEmail  conflict.json
+  NotFound        not_found.json
+  Validation      validation.json
+  default         error.json
+
+errors /admin/* ->
+  Forbidden       forbidden.html
+  default         error.html
+```
+
+Rules:
+
+- More specific route patterns win.
+- A system-level block provides defaults; a group/handler scope overrides it.
+- `default` is the catch-all for any error type not explicitly listed.
+- Each entry maps a Go error type name (left) to a formatter name (right). The formatter is the same kind of formatter used by the `format` step.
 
 ## Validation Errors
 
-<!-- How per-field validation errors are structured. Example:
+The pipeline's input parser raises a `Validation` error when a body or query struct fails its `validate` tags. The error carries per-field details so a formatter can render structured per-field messages. The exact response shape is the formatter's responsibility — the pipeline does not impose a JSON envelope.
 
-Validation errors populate the `details` array with one entry per invalid field:
+## Internal vs External
 
-```json
-{
-  "error": {
-    "code": "validation_failed",
-    "message": "One or more fields are invalid.",
-    "details": [
-      { "field": "email", "code": "required", "message": "Email is required." },
-      { "field": "age", "code": "out_of_range", "message": "Age must be between 0 and 150." }
-    ]
-  }
-}
-```
-
--->
+Storage-specific error codes, stack traces, and internal identifiers must not leak into the response body. Translate to a typed error at the boundary (a custom resolver, commit, or source adapter) and let the formatter produce a safe representation. Internal context (originals, stack, request ID) belongs in logs.
 
 ## Logging
 
-<!-- How errors are logged and severity mapping. Example:
-
-All errors are logged with structured fields including the error code,
-request ID, and stack trace (for unexpected errors only).
+Pipeline errors are logged at the `log` stage with structured fields including the error type, request ID, and originating stage. Severity convention:
 
 | Severity | When |
 | --- | --- |
 | `warn` | Client errors (4xx) — expected, no action needed |
 | `error` | Server errors (5xx) — unexpected, requires investigation |
 
+## Error Catalog
+
+<!-- Registry of error types in use across the project. Add entries as features
+     introduce new typed errors. Example:
+
+### NotFound
+
+- **Status**: 404
+- **Owner**: data layer (translated from source `not found`)
+- **Carries**: `Resource` (string)
+
 -->
 
-## Internal vs External Errors
-
-<!-- Rules for what error information is exposed to callers vs kept internal. Example:
-
-External responses include the error code and a safe, human-readable message.
-Stack traces, internal identifiers, and infrastructure details are never
-included in responses. They are logged server-side with the request ID
-for correlation.
-
--->
+_No project-wide errors registered yet. Per-feature error types live in their owning spec._
