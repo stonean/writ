@@ -4,29 +4,29 @@ Tasks derived from the [plan](plan.md). Complete in order. Each task has a clear
 
 ## 1. Initialize the Go module
 
-- [ ] Create `go.mod` at the repository root with module path `github.com/stonean/writ` and Go 1.22 minimum.
-- [ ] Confirm `go build ./...` and `go vet ./...` succeed on an empty module.
+- [x] Create `go.mod` at the repository root with module path `github.com/stonean/writ` and Go 1.22 minimum.
+- [x] Confirm `go build ./...` and `go vet ./...` succeed on an empty module.
 
 **Done when:** the module exists, `go build ./...` is clean, and the repository can host Go packages.
 
 ## 2. Define source-position primitives
 
-- [ ] Create `ast/source.go` with `Source`, `Position`, and `Span` per the data model.
-- [ ] Implement `Span.Text()` returning the verbatim bytes the span covers.
-- [ ] Add a doc comment on the package (`ast`) declaring the AST is exported but unstable pre-1.0, per AGENTS.md.
-- [ ] Write unit tests for `Position` ordering and `Span.Text` on a synthetic `Source`.
+- [x] Create `ast/source.go` with `Source`, `Position`, and `Span` per the data model.
+- [x] Implement `Span.Text()` returning the verbatim bytes the span covers.
+- [x] Add a doc comment on the package (`ast`) declaring the AST is exported but unstable pre-1.0, per AGENTS.md.
+- [x] Write unit tests for `Position` ordering and `Span.Text` on a synthetic `Source`.
 
 **Done when:** the types compile, the package comment is in place, and the unit tests pass.
 
 ## 3. Define the AST node types
 
-- [ ] Create `ast/node.go` with the `Node` interface and `nodeBase`.
-- [ ] Create `ast/program.go` with `Program`, `SystemBlock`, `GroupBlock`, `HandlerBlock`, `ErrorsBlock`, `ErrorsEntry`, and `IncludeStmt` per the data model.
-- [ ] Create `ast/route.go` with `RoutePattern`, the `RouteSegment` interface, and the three segment types.
-- [ ] Create `ast/stmt.go` with the `Stmt` interface and one node type per pipeline statement listed in the data model.
-- [ ] Create `ast/expr.go` with `Call`, the `Expr` interface, every value-reference variant, the `Literal` interface, every literal type, the `NamedRef` helper, and the `ApproveExpr` tree.
-- [ ] Add the marker methods (`stmt()`, `expr()`, `literal()`, `routeSegment()`, `approveExpr()`) on each implementing type.
-- [ ] Run `go vet ./ast/...` and confirm a clean run.
+- [x] Create `ast/node.go` with the `Node` interface and `nodeBase`.
+- [x] Create `ast/program.go` with `Program`, `SystemBlock`, `GroupBlock`, `HandlerBlock`, `ErrorsBlock`, `ErrorsEntry`, and `IncludeStmt` per the data model.
+- [x] Create `ast/route.go` with `RoutePattern`, the `RouteSegment` interface, and the three segment types.
+- [x] Create `ast/stmt.go` with the `Stmt` interface and one node type per pipeline statement listed in the data model.
+- [x] Create `ast/expr.go` with `Call`, the `Expr` interface, every value-reference variant, the `Literal` interface, every literal type, the `NamedRef` helper, and the `ApproveExpr` tree.
+- [x] Add the marker methods (`stmt()`, `expr()`, `literal()`, `routeSegment()`, `approveExpr()`) on each implementing type.
+- [x] Run `go vet ./ast/...` and confirm a clean run.
 
 **Done when:** every node type from the data model is declared, every interface is satisfied by its members, and `go build ./ast/...` is clean.
 
