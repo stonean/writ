@@ -32,19 +32,21 @@ Tasks derived from the [plan](plan.md). Complete in order. Each task has a clear
 
 ## 4. Implement the lexer
 
-- [ ] Create `parser/lexer.go` with `Token`, `TokenKind`, and a `lexer` struct that holds a `*ast.Source` and current position.
-- [ ] Implement scanning for: identifier (with dotted segments), integer (with optional leading minus), string (with `\"`, `\\`, `\n`, `\t`, `\r` escapes only), rate literal (integer + `/` + one of `sec`/`min`/`hour`/`day`), `->`, `(`, `)`, `,`, `:`, `=`, `*`, `/`, `-`, newline, EOF.
-- [ ] Strip line comments (`#` to end-of-line) so they never reach the parser.
-- [ ] Produce structured lex errors for unterminated strings, unknown escapes, raw newlines inside strings, bad rate units, and stray characters.
-- [ ] Track line and column accurately; advance line on `\n`, reset column at line boundaries.
-- [ ] Write a lexer-only test file `parser/lexer_test.go` covering each token kind, each error condition, and a multi-line input that exercises position tracking.
+- [x] Create `parser/lexer.go` with `Token`, `TokenKind`, and a `lexer` struct that holds a `*ast.Source` and current position.
+- [x] Implement scanning for: identifier (with dotted segments), integer (with optional leading minus), string (with `\"`, `\\`, `\n`, `\t`, `\r` escapes only), rate literal (integer + `/` + one of `sec`/`min`/`hour`/`day`), `->`, `(`, `)`, `,`, `:`, `=`, `*`, `/`, `-`, newline, EOF.
+- [x] Strip line comments (`#` to end-of-line) so they never reach the parser.
+- [x] Produce structured lex errors for unterminated strings, unknown escapes, raw newlines inside strings, bad rate units, and stray characters.
+- [x] Track line and column accurately; advance line on `\n`, reset column at line boundaries.
+- [x] Write a lexer-only test file `parser/lexer_test.go` covering each token kind, each error condition, and a multi-line input that exercises position tracking.
 
 **Done when:** the lexer test suite passes and every error condition listed above produces a structured lex error with a precise span.
 
+Note: integer with optional leading minus is split into a `MINUS` token followed by `INT`; the parser recombines at integer-expected positions. This avoids ambiguity with the `-` that appears inside route-segment literals (e.g., `m-search`) and HTTP method names. `RATE` recognition only fires when the previously emitted token is not `SLASH`, preserving the spec's `[a-zA-Z0-9_-]+` route-segment grammar (e.g., `/60/min` lexes as `SLASH INT SLASH IDENT`, not `SLASH RATE`).
+
 ## 5. Implement the error type
 
-- [ ] Create `parser/error.go` with the `Error` struct (`File`, `Line`, `Column`, `Span`, `Message`) and an `Error() string` method that formats as `"file:line:col: message"`.
-- [ ] Confirm the type is comparable and printable in test failure output.
+- [x] Create `parser/error.go` with the `Error` struct (`File`, `Line`, `Column`, `Span`, `Message`) and an `Error() string` method that formats as `"file:line:col: message"`.
+- [x] Confirm the type is comparable and printable in test failure output.
 
 **Done when:** the type compiles and an `Error{}` value formats as expected in a unit test.
 
