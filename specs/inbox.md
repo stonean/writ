@@ -17,7 +17,8 @@ Temporary inbox for known feature areas not yet assigned to a feature spec. Item
 
 The README defines Writ's full surface. Each item below is a slice of that surface that needs its own spec before implementation. They are listed roughly in the order a runtime would need them, not as a fixed build order.
 
-- **DSL parser and pipeline runtime** — lexing, parsing, AST, include flattening, override resolution (handler beats group beats system), per-stage execution model, parallel resolve scheduling.
+- **DSL parser** — lexer, grammar, AST, include flattening. Produces a fully resolved AST from one or more `.writ` files; does not execute anything.
+- **Pipeline runtime** — given a parsed AST, executes the request pipeline: stage ordering, override resolution (handler beats group beats system), parallel resolve scheduling, transaction wrapping for commits, content negotiation. Depends on the parser.
 - **Code generation (`writ generate`)** — read `.writ` + `.sql` files, produce typed route registration, typed field accessors for `:model.attribute` references, parameter binding and result scanning glue.
 - **Startup validation** — every check enumerated in the README's *Startup Validation* section, run before the server accepts requests.
 - **Data layer** — SQL files in `queries/` with `-- name:` headers, `$param` binding by lowercased struct field name, type scanning by capitalized resolve name, custom Go resolver override, automatic transaction wrapping for multiple commits.
@@ -32,6 +33,7 @@ The README defines Writ's full surface. Each item below is a slice of that surfa
 - **Testing DSL (`.test.writ`)** — `users` and `fixtures` blocks, request line format (`as <user> METHOD path with <fixture>`), `expect` assertions, `capture`, `seed`, fresh-database execution model, `writ test` runner.
 - **Development mode (`writ dev`)** — filesystem watcher, full restart on `.writ` / `.sql` / `.go` changes, hot reload (no restart) on `.html` template changes.
 - **CLI tooling** — `writ generate`, `writ run`, `writ dev`, `writ worker`, `writ test`, `writ show <route>`, `writ routes`, `writ migrate {new,up,down,status}`.
+- **Code formatter (`writ fmt`)** — canonical AST→text rendering, idempotent (running twice produces the same output), preserves comments and includes. Depends on the parser AST. Modeled on `gofmt`: language stays permissive, formatter is opinionated.
 
 ## Open Items
 
