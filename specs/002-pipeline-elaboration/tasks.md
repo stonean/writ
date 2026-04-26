@@ -21,9 +21,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 3. Route-pattern containment helpers
 
-- [ ] Create `pipeline/route.go` with `containsAll`, `strictlyContains`, and `equalPatterns` per the plan's containment table.
-- [ ] Implement segment-level helpers (`segContains`, `splitSegments` to peel off a trailing wildcard) as unexported.
-- [ ] Create `pipeline/route_test.go` with table-driven tests covering: identical patterns, parameter-name differences, literal-vs-parameter, wildcard vs non-wildcard, wildcard prefixes of differing lengths, and the four cases from the plan's containment table.
+- [x] Create `pipeline/route.go` with `containsAll`, `strictlyContains`, and `equalPatterns` per the plan's containment table.
+- [x] Implement segment-level helpers (`segContains`, `splitSegments` to peel off a trailing wildcard) as unexported.
+- [x] Create `pipeline/route_test.go` with table-driven tests covering: identical patterns, parameter-name differences, literal-vs-parameter, wildcard vs non-wildcard, wildcard prefixes of differing lengths, and the four cases from the plan's containment table.
 
 **Done when:** `go test ./pipeline -run TestRoute` passes and every row in the plan's containment table has a corresponding test.
 

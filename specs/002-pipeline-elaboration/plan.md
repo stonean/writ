@@ -90,9 +90,11 @@ Cases:
 | sub | sup | Rule |
 | --- | --- | --- |
 | no wildcard | no wildcard | `len(sub) == len(sup)` and segment-by-segment `sub[i] ⊆ sup[i]` |
-| no wildcard | wildcard, prefix N | `len(sub) >= N` and `sub[i] ⊆ sup[i]` for `i < N` |
+| no wildcard | wildcard, prefix N | `len(sub) > N` and `sub[i] ⊆ sup[i]` for `i < N` |
 | wildcard, prefix M | no wildcard | always false (sub matches paths longer than sup ever can) |
 | wildcard, prefix M | wildcard, prefix N | `M >= N` and `sub[i] ⊆ sup[i]` for `i < N` |
+
+A trailing wildcard requires at least one additional segment beyond the prefix (per the spec's *Group Membership* example: `group /admin/*` matches every handler whose route starts with `/admin/`, not the bare `/admin` handler). That is why `no wildcard ⊆ wildcard prefix N` uses strict greater-than: `/admin` (one segment) is not contained in `/admin/*` (which matches paths with at least two segments).
 
 Segment containment:
 
