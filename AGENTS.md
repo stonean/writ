@@ -25,12 +25,16 @@ Per-package verification suite — run every one of these on the affected Go pac
 | `golangci-lint` | `golangci-lint run ./<pkg>/...` | Aggregate linter (defaults are sufficient) |
 | `govulncheck` | `govulncheck ./<pkg>/...` | Known-vulnerability scan |
 | Build | `go build ./<pkg>/...` | Must succeed |
-| Test | `go test ./<pkg>/... -count=1` | Must pass; `-count=1` defeats the test cache |
+| Test | `go test ./<pkg>/... -race -shuffle=on -count=1` | Must pass; `-race` catches data races, `-shuffle=on` catches order-dependent tests, `-count=1` defeats the test cache |
+| Module tidy | `go mod tidy && git diff --exit-code go.mod go.sum` | `go.mod`/`go.sum` must be clean — non-empty diff means deps are stale |
+| Generated drift | `go generate ./<pkg>/... && git diff --exit-code` | Generated output must match sources — non-empty diff means a `//go:generate` directive needs to be re-run |
 
 Tooling notes:
 
 - `staticcheck` and `errcheck` must be built against the module's required Go version (currently 1.26). If a tool refuses to run with a `version mismatch` message, rebuild it: `go install honnef.co/go/tools/cmd/staticcheck@latest`, `go install github.com/kisielk/errcheck@latest`, `go install golang.org/x/vuln/cmd/govulncheck@latest`.
 - `staticcheck` and `golangci-lint` may report `unused` warnings during multi-task implementation when an upcoming task wires the constructor or helper. These are acceptable transient warnings — note them in the commit message and confirm they clear when the dependent task lands. Do not suppress with `//nolint`; let them resolve naturally.
+- `golangci-lint` re-runs several of the standalone linters above (`gofmt`, `go vet`, `staticcheck`, `errcheck`) depending on its configuration. Running them individually first is intentional: failures surface faster and with clearer per-tool output.
+- The module-tidy and generated-drift checks rely on `git diff --exit-code`. Run them from a clean working tree (or stage your intended changes first) so the diff reflects only tool output, not in-progress edits.
 
 ## Project Structure
 
