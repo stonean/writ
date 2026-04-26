@@ -8,25 +8,29 @@ See [constitution.md](constitution.md) — guiding principles, development pipel
 
 ## Tech Stack
 
-<!-- Define your project's tech stack here. Example:
-
 | Layer | Technology | Role |
 | --- | --- | --- |
-| **Language** | Go v1.26.0 | Application logic |
-| **Database** | PostgreSQL v18 | Primary data store |
-
--->
+| **Language** | Go 1.26 | DSL parser, pipeline elaboration, runtime, code generation |
 
 ## Commands
 
-<!-- Define your project's common commands. Example:
+Per-package verification suite — run every one of these on the affected Go package(s) before reporting a task done or proposing a commit. None may be skipped; all must be clean (or every remaining warning must be a documented expected-to-clear-imminently case noted in the commit message).
 
-- Dev: `make dev`
-- Build: `make build`
-- Test: `make test`
-- Lint: `make lint`
+| Tool | Invocation | Purpose |
+| --- | --- | --- |
+| `gofmt` | `gofmt -l <pkg>/` | Empty output means no files need reformatting |
+| `go vet` | `go vet ./<pkg>/...` | Catches suspicious constructs the compiler accepts |
+| `staticcheck` | `staticcheck ./<pkg>/...` | Style + correctness checks beyond `go vet` |
+| `errcheck` | `errcheck ./<pkg>/...` | Catches unchecked errors |
+| `golangci-lint` | `golangci-lint run ./<pkg>/...` | Aggregate linter (defaults are sufficient) |
+| `govulncheck` | `govulncheck ./<pkg>/...` | Known-vulnerability scan |
+| Build | `go build ./<pkg>/...` | Must succeed |
+| Test | `go test ./<pkg>/... -count=1` | Must pass; `-count=1` defeats the test cache |
 
--->
+Tooling notes:
+
+- `staticcheck` and `errcheck` must be built against the module's required Go version (currently 1.26). If a tool refuses to run with a `version mismatch` message, rebuild it: `go install honnef.co/go/tools/cmd/staticcheck@latest`, `go install github.com/kisielk/errcheck@latest`, `go install golang.org/x/vuln/cmd/govulncheck@latest`.
+- `staticcheck` and `golangci-lint` may report `unused` warnings during multi-task implementation when an upcoming task wires the constructor or helper. These are acceptable transient warnings — note them in the commit message and confirm they clear when the dependent task lands. Do not suppress with `//nolint`; let them resolve naturally.
 
 ## Project Structure
 
