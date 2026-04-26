@@ -37,11 +37,11 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 5. Per-level pipeline composer (placement and order checks)
 
-- [ ] Create `pipeline/level.go` with a `levelEntry` internal type (kind, source, isNone, attached observationals) and a `composeLevel(stmts []ast.Stmt, level SourceLevel, group *ast.GroupBlock) (entries []levelEntry, errs []Error)` function.
-- [ ] In `composeLevel`, run the stage-placement check first: emit a `StagePlacement` error for `format`/`redirect` at non-handler levels and for `format none`/`redirect none` at any level. Statements that fail placement are dropped from the level's entries.
-- [ ] Run the stage-order check on remaining semantic stages: track the highest canonical position seen and emit a `StageOrder` error for any semantic statement whose canonical position is lower than the highest seen. The offending statement is still placed at its canonical position so consumers can render it.
-- [ ] Place observational entries at their source positions relative to surrounding semantic entries (the "attached observational" mechanism in the plan).
-- [ ] Add unit tests in `pipeline/level_test.go` covering: canonical-order handler, non-canonical handler (order error reported but statement still in canonical position), `format` in system block (placement error), `format none` at handler level (placement error), `redirect` in group (placement error), observational stage between two `resolve`s, and an empty level (zero entries).
+- [x] Create `pipeline/level.go` with a `levelEntry` internal type (kind, source, isNone, attached observationals) and a `composeLevel(stmts []ast.Stmt, level SourceLevel) (entries []levelEntry, errs []Error)` function. (The originating `*ast.GroupBlock` is attached later by the override engine, not at the level-composition stage.)
+- [x] In `composeLevel`, run the stage-placement check first: emit a `StagePlacement` error for `format`/`redirect` at non-handler levels and for `format none`/`redirect none` at any level. Statements that fail placement are dropped from the level's entries.
+- [x] Run the stage-order check on remaining semantic stages: track the highest canonical position seen and emit a `StageOrder` error for any semantic statement whose canonical position is lower than the highest seen. The offending statement is still placed at its canonical position so consumers can render it.
+- [x] Place observational entries at their source positions relative to surrounding semantic entries (the "attached observational" mechanism in the plan).
+- [x] Add unit tests in `pipeline/level_test.go` covering: canonical-order handler, non-canonical handler (order error reported but statement still in canonical position), `format` in system block (placement error), `format none` at handler level (placement error), `redirect` in group (placement error), observational stage between two `resolve`s, and an empty level (zero entries).
 
 **Done when:** every stage-placement and stage-order acceptance criterion has at least one corresponding passing test, and `composeLevel` returns deterministic output across repeated calls on the same input.
 

@@ -129,7 +129,7 @@ The same algorithm runs for `errors` blocks, producing a kept set of `*ast.Error
 
 ### Per-level pipeline composition
 
-Each "level" is one of: the system block (if any), each kept group (in specificity order, least-specific first), and the handler block. For each level we build an ordered list of "level entries":
+Each "level" is one of: the system block (if any), each kept group (in specificity order, least-specific first), and the handler block. For each level we build an ordered list of "level entries". The composer signature is `composeLevel(stmts []ast.Stmt, level SourceLevel) ([]levelEntry, []Error)` — the level identifier drives the stage-placement check, but the originating group's `*ast.GroupBlock` is not needed at this stage because the override engine attaches that context when constructing the final `Stage` values.
 
 - A semantic stage statement (single-instance or multi-instance) becomes a level entry tagged with its `StageKind`.
 - An observational stage statement becomes a level entry tagged `StageLog`/`StageMeasure`.
