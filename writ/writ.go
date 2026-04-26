@@ -1,6 +1,7 @@
 package writ
 
 import (
+	"net/http"
 	"os"
 	"sync/atomic"
 )
@@ -54,4 +55,29 @@ func New() *Writ {
 		formatters: make(map[string]FormatterFunc),
 		writEnv:    env,
 	}
+}
+
+// Run loads the .writ program at path, then binds an HTTP listener
+// on the port from PORT (default "8080") and serves until the
+// process is interrupted. Run is sugar over Load + Handler +
+// http.ListenAndServe; it returns whatever error Load or
+// ListenAndServe produces.
+//
+// Run does not accept an address argument and configures no server
+// timeouts. Callers needing a custom address or timeouts use
+// [Writ.Load] plus their own &http.Server{} composition with
+// [Writ.Handler].
+func (w *Writ) Run(path string) error {
+	if err := w.Load(path); err != nil {
+		return err
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = defaultPort
+	}
+	// G114 flags ListenAndServe without a timeout-configured
+	// server. The runtime intentionally imposes no per-request
+	// timeout per spec 003 Q12; callers needing timeouts compose
+	// their own &http.Server with [Writ.Handler].
+	return http.ListenAndServe(":"+port, w.Handler()) // #nosec G114 -- timeout policy deferred per spec 003 Q12
 }

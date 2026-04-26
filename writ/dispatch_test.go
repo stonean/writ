@@ -302,7 +302,7 @@ DELETE /users/:id ->
 	if err != nil {
 		t.Fatalf("do: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", resp.StatusCode)
@@ -373,7 +373,7 @@ func getBody(t *testing.T, url string) (*http.Response, string) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return resp, string(body)
 }
 
@@ -387,7 +387,7 @@ func postBody(t *testing.T, url string) (*http.Response, string) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return resp, string(body)
 }
 

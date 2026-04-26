@@ -79,9 +79,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 9. `Run` convenience and `gosec` annotation
 
-- [ ] Add `Run(path string) error` to `writ/writ.go`: call `Load(path)`, then `os.Getenv("PORT")` (default `defaultPort`), then `http.ListenAndServe(":"+port, w.Handler())`. Annotate the `ListenAndServe` call with `//nolint:gosec // G114: timeout policy deferred per spec 003 Q12` and a comment citing the spec resolution.
-- [ ] Add a unit test in `writ/load_test.go` (or split into `writ/run_test.go`) that builds a `Writ`, calls `Run` on a goroutine bound to `127.0.0.1:0` via a custom `http.Server` test harness — actually verify via the `Load`-then-`http.ListenAndServe` decomposition since `Run` blocks. Acceptable: assert that `Run` returns the same error that `Load` would return on a bad path, without ever binding.
-- [ ] Confirm `gosec -quiet ./writ/...` exits cleanly with the `//nolint` annotation in place.
+- [x] Add `Run(path string) error` to `writ/writ.go`: call `Load(path)`, then `os.Getenv("PORT")` (default `defaultPort`), then `http.ListenAndServe(":"+port, w.Handler())`. Annotate the `ListenAndServe` call with `// #nosec G114 -- timeout policy deferred per spec 003 Q12` (gosec uses `#nosec` directives, not `//nolint:gosec`).
+- [x] Add a unit test in `writ/run_test.go` that asserts `Run` returns the underlying load error on a bad path without ever binding a port.
+- [x] Confirm `gosec -quiet ./writ/...` exits cleanly with the `#nosec` annotation in place.
 
 **Done when:** the `Run` happy path is documented by a unit test that verifies its `Load` orchestration, the `gosec` suppression is annotated, and the security scan is clean.
 
