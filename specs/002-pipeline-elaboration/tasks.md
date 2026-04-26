@@ -66,11 +66,11 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 8. Top-level orchestration: `Elaborate`
 
-- [ ] Create `pipeline/elaborate.go` with the `Elaborate(prog *ast.Program) (*Resolved, []Error)` entry point.
-- [ ] In `Elaborate`: handle nil/empty program (return a non-nil `Resolved` with zero handlers), build the system level entries once, then per handler: skip partial handler nodes (nil `Pattern` or empty `Method`), find kept groups + conflicting groups, emit any `AmbiguousGroup` error referencing the conflicting groups and the handler block, build per-group level entries, run `buildEffectiveStages`, run `buildErrorMap` against `prog.Errors`, and assemble the `*Handler`.
-- [ ] Append all errors (system-level placement/order errors, per-group placement/order errors, per-handler placement/order errors, ambiguity errors) into a single slice in walk order.
-- [ ] Always return a non-nil `*Resolved`; on partial failure include every cleanly-resolved handler.
-- [ ] Add a smoke test that round-trips a small `.writ` source through `parser.ParseString` then `Elaborate` and asserts handler count, basic stage shape, and zero errors.
+- [x] Create `pipeline/elaborate.go` with the `Elaborate(prog *ast.Program) (*Resolved, []Error)` entry point.
+- [x] In `Elaborate`: handle nil/empty program (return a non-nil `Resolved` with zero handlers), build the system level entries once, then per handler: skip partial handler nodes (nil `Pattern` or empty `Method`), find kept groups + conflicting groups, emit any `AmbiguousGroup` error referencing the conflicting groups and the handler block, build per-group level entries, run `buildEffectiveStages`, run `buildErrorMap` against `prog.Errors`, and assemble the `*Handler`.
+- [x] Append all errors (system-level placement/order errors, per-group placement/order errors, per-handler placement/order errors, ambiguity errors) into a single slice in walk order.
+- [x] Always return a non-nil `*Resolved`; on partial failure include every cleanly-resolved handler.
+- [x] Add a smoke test that round-trips a small `.writ` source through `parser.ParseString` then `Elaborate` and asserts handler count, basic stage shape, and zero errors.
 
 **Done when:** the smoke test passes and `Elaborate` produces a non-nil `*Resolved` for every input including an empty program.
 
