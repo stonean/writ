@@ -105,19 +105,3 @@ The boundary is: if it cares about business logic or data flow, it is a Writ sta
 ## Workers
 
 `writ.NewWorker()` constructs a stripped-down Writ instance with no HTTP listener and no routes — only event listeners. Workers share the same emitter configuration, the same event handler signatures, and the same registration API as the web process. The same code that runs as `w.On(...)` in-process can be moved into a worker without modification. Worker processes use the `writ worker` CLI verb.
-
-## Shared Infrastructure
-
-| Concern | Owner |
-| --- | --- |
-| DSL parser, AST, override resolution | DSL/runtime spec |
-| Code generation (`writ generate`) | Code generation spec |
-| HTTP transport, routing, listener | DSL/runtime spec |
-| Source adapters (Postgres, Redis, etc.) | Data layer spec |
-| Template loading and rendering | HTML rendering spec |
-| Session storage adapters | Sessions spec |
-| Event emitters and worker runtime | Background events spec |
-| Migration runner | Migrations spec |
-| Test runner | Testing spec |
-
-Each owner is a feature spec under `specs/NNN-{slug}/`. Until a spec exists, the area lives in [`inbox.md`](inbox.md).
