@@ -30,10 +30,10 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 4. Startup error type
 
-- [ ] Create `writ/error.go` with `ErrorKind` constants, `ErrorKind.String()`, `Entry`, and `Error` per the data model.
-- [ ] Implement `Error.Error() string` formatting each entry as `file:line:col: message` joined by newlines.
-- [ ] Implement `Error.Unwrap() []error` returning each `Entry` wrapped as an individual error so `errors.As` and `errors.Is` work.
-- [ ] Add unit tests in `writ/error_test.go` covering: empty `Error`, single-entry formatting, multi-entry formatting in source order, `errors.As(*Error)`, and per-entry `Unwrap()`.
+- [x] Create `writ/error.go` with `ErrorKind` constants, `ErrorKind.String()`, `Entry`, and `Error` per the data model.
+- [x] Implement `Error.Error() string` formatting each entry as `file:line:col: message` joined by newlines.
+- [x] Implement `Error.Unwrap() []error` returning each `Entry` wrapped as an individual error so `errors.As` works. (`errors.Is` against Entry values is not supported because Entry contains a slice field; `errors.As(*Error)` plus iterating `Entries[i].Kind` is the supported pattern.)
+- [x] Add unit tests in `writ/error_test.go` covering: empty `Error`, single-entry formatting, multi-entry formatting in source order, `errors.As(*Error)`, and per-entry `Unwrap()`.
 
 **Done when:** every formatting and unwrap path is exercised and `errors.As` against the aggregate works as documented.
 
