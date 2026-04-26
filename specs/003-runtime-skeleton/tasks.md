@@ -110,8 +110,8 @@ Coverage map: most checkboxes are covered by per-component test files; `acceptan
 
 ## 12. Determinism and "no I/O" guards
 
-- [ ] Add a test in `writ/determinism_test.go` that loads the same fixture into two `Writ` instances and walks both routing tables asserting structural equality: same method ordering, same per-method segment sequences, same span sequence per route, same registered-fn names per `resolveStep`/`formatStep`.
-- [ ] Add a no-I/O source-grep test analogous to `pipeline/determinism_test.go`'s `TestNoIO`. The runtime *does* import `os` (for `os.Getenv`) and `net/http`; the grep allowlists `"os"` and `"net/http"` precisely while still catching `time.`, `runtime.NumGoroutine`, and `go func` in non-test files.
+- [x] Add a test in `writ/determinism_test.go` that loads the same fixture into two `Writ` instances and walks both routing tables asserting structural equality: same method ordering, same per-method segment sequences, same span sequence per route, same registered-fn names per `resolveStep`/`formatStep`.
+- [x] Add a no-I/O source-grep test analogous to `pipeline/determinism_test.go`'s `TestNoIO`. The runtime *does* import `os` (for `os.Getenv`) and `net/http`; the grep allowlists `"os"` and `"net/http"` precisely while still catching `time.`, `runtime.NumGoroutine`, and `go func` in non-test files.
 
 **Done when:** both tests pass and the no-I/O assertion mechanism is in the test file as a runtime check.
 
