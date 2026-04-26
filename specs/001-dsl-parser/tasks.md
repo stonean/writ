@@ -41,7 +41,7 @@ Tasks derived from the [plan](plan.md). Complete in order. Each task has a clear
 
 **Done when:** the lexer test suite passes and every error condition listed above produces a structured lex error with a precise span.
 
-Note: integer with optional leading minus is split into a `MINUS` token followed by `INT`; the parser recombines at integer-expected positions. This avoids ambiguity with the `-` that appears inside route-segment literals (e.g., `m-search`) and HTTP method names. `RATE` recognition only fires when the previously emitted token is not `SLASH`, preserving the spec's `[a-zA-Z0-9_-]+` route-segment grammar (e.g., `/60/min` lexes as `SLASH INT SLASH IDENT`, not `SLASH RATE`).
+Note: integer with optional leading minus is split into a `MINUS` token followed by `INT`; the parser recombines at integer-expected positions. This avoids ambiguity with the `-` that appears inside route-segment literals (e.g., `m-search`) and HTTP method names. `RATE` recognition only fires inside parens (`parenDepth > 0`) so route patterns of any shape — including `/v1-2/things` or `/60/min` — tokenize as `SLASH`, `INT`/`IDENT`, and `MINUS` components rather than colliding with rate literals. (See task 6 for why paren-depth replaced the earlier previous-token rule.)
 
 ## 5. Implement the error type
 
@@ -52,16 +52,18 @@ Note: integer with optional leading minus is split into a `MINUS` token followed
 
 ## 6. Implement the parser core (top-level + statements, no includes yet)
 
-- [ ] Create `parser/parser.go` with `Parse`, `ParseString`, `Option`, `WithFS`, `WithRoot`, and the `config` struct.
-- [ ] Implement recursive-descent functions: `parseProgram`, `parseSystemBlock`, `parseGroupBlock`, `parseHandlerBlock`, `parseErrorsBlock`, `parseStatement` (dispatching on the leading identifier lexeme), and one `parseXxxStmt` per pipeline statement kind.
-- [ ] Implement route-pattern parsing in a helper used by all three block types that take a pattern.
-- [ ] Implement call parsing (`parseCall`) and value-reference parsing (`parseExpr`) including the named-arg, body, query, route-param, and field-access forms.
-- [ ] Implement approve-expression parsing as a precedence-climbing tower (`parseApproveExpr`/`parseOrExpr`/`parseAndExpr`/`parseNotExpr`/`parsePrimaryExpr`).
-- [ ] Implement block-boundary detection: open block on `->` at end-of-line, close on next column-0 non-newline token or EOF.
-- [ ] Stub `parseIncludeStmt` to record an error "include not yet implemented" — the next task wires it.
-- [ ] Always return a non-nil `*ast.Program`.
+- [x] Create `parser/parser.go` with `Parse`, `ParseString`, `Option`, `WithFS`, `WithRoot`, and the `config` struct.
+- [x] Implement recursive-descent functions: `parseProgram`, `parseSystemBlock`, `parseGroupBlock`, `parseHandlerBlock`, `parseErrorsBlock`, `parseStatement` (dispatching on the leading identifier lexeme), and one `parseXxxStmt` per pipeline statement kind.
+- [x] Implement route-pattern parsing in a helper used by all three block types that take a pattern.
+- [x] Implement call parsing (`parseCall`) and value-reference parsing (`parseExpr`) including the named-arg, body, query, route-param, and field-access forms.
+- [x] Implement approve-expression parsing as a precedence-climbing tower (`parseApproveExpr`/`parseOrExpr`/`parseAndExpr`/`parseNotExpr`/`parsePrimaryExpr`).
+- [x] Implement block-boundary detection: open block on `->` at end-of-line, close on next column-0 non-newline token or EOF.
+- [x] Stub `parseIncludeStmt` to record an error "include not yet implemented" — the next task wires it.
+- [x] Always return a non-nil `*ast.Program`.
 
 **Done when:** every block kind, statement kind, value-reference kind, and the approve expression tower parse successfully on synthetic inputs with no includes.
+
+Note: rate-vs-route disambiguation moved from previous-token tracking (task 4 note) to **paren-depth** tracking. `RATE` is only emitted inside parens (`parenDepth > 0`); outside parens the components emit as `INT SLASH IDENT` so route patterns and hyphenated literals like `/v1-2/things` parse cleanly. The previous-token approach failed on hyphenated route literals (`/v1-2/things` placed `MINUS` immediately before `INT(2)`, so the `SLASH`-only check let rate detection fire). Paren-depth is the structural signal for "we're inside a call argument list" — the only place rates legally appear.
 
 ## 7. Implement error recovery
 

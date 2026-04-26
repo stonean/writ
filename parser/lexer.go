@@ -92,20 +92,18 @@ type Token struct {
 
 // lexer is a byte-oriented scanner over a single ast.Source.
 //
-// The lexer keeps the previously-emitted TokenKind so it can
-// distinguish a rate literal (e.g. "60/min" inside a call) from a
-// route segment sequence (e.g. "/60/min" in a route pattern). When
-// the previous token was TokenSlash the int-followed-by-`/<unit>`
-// shape is not collapsed into TokenRate; the components are emitted
-// separately.
+// The lexer tracks paren nesting depth so it can distinguish a rate
+// literal (e.g. "60/min" inside a call's argument list) from
+// look-alike sequences appearing in route patterns or hyphenated
+// route segments. Rate recognition only fires when parenDepth > 0;
+// elsewhere the int, slash, and identifier are emitted separately.
 type lexer struct {
-	src      *ast.Source
-	pos      int // 0-based byte offset
-	line     int // 1-based
-	col      int // 1-based, byte position within the line
-	prev     TokenKind
-	havePrev bool
-	errs     []Error
+	src        *ast.Source
+	pos        int // 0-based byte offset
+	line       int // 1-based
+	col        int // 1-based, byte position within the line
+	parenDepth int
+	errs       []Error
 }
 
 func newLexer(src *ast.Source) *lexer {
@@ -156,8 +154,14 @@ func (l *lexer) span(start, end ast.Position) ast.Span {
 }
 
 func (l *lexer) emit(kind TokenKind, span ast.Span, lexeme string) Token {
-	l.prev = kind
-	l.havePrev = true
+	switch kind {
+	case TokenLParen:
+		l.parenDepth++
+	case TokenRParen:
+		if l.parenDepth > 0 {
+			l.parenDepth--
+		}
+	}
 	return Token{Kind: kind, Lexeme: lexeme, Span: span}
 }
 
@@ -297,7 +301,7 @@ func (l *lexer) scanNumberOrRate(start ast.Position) Token {
 	if l.peek() != '/' || !isLetter(l.peekAt(1)) {
 		return l.emit(TokenInt, intSpan, intLexeme)
 	}
-	if l.havePrev && l.prev == TokenSlash {
+	if l.parenDepth == 0 {
 		return l.emit(TokenInt, intSpan, intLexeme)
 	}
 

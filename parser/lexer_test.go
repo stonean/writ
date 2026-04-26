@@ -43,10 +43,10 @@ func TestLexerEachTokenKind(t *testing.T) {
 		{"integer", "60", []TokenKind{TokenInt, TokenEOF}},
 		{"string", `"hello"`, []TokenKind{TokenString, TokenEOF}},
 		{"empty string", `""`, []TokenKind{TokenString, TokenEOF}},
-		{"rate sec", "60/sec", []TokenKind{TokenRate, TokenEOF}},
-		{"rate min", "60/min", []TokenKind{TokenRate, TokenEOF}},
-		{"rate hour", "1/hour", []TokenKind{TokenRate, TokenEOF}},
-		{"rate day", "100/day", []TokenKind{TokenRate, TokenEOF}},
+		{"rate sec", "(60/sec)", []TokenKind{TokenLParen, TokenRate, TokenRParen, TokenEOF}},
+		{"rate min", "(60/min)", []TokenKind{TokenLParen, TokenRate, TokenRParen, TokenEOF}},
+		{"rate hour", "(1/hour)", []TokenKind{TokenLParen, TokenRate, TokenRParen, TokenEOF}},
+		{"rate day", "(100/day)", []TokenKind{TokenLParen, TokenRate, TokenRParen, TokenEOF}},
 		{"arrow", "->", []TokenKind{TokenArrow, TokenEOF}},
 		{"lparen", "(", []TokenKind{TokenLParen, TokenEOF}},
 		{"rparen", ")", []TokenKind{TokenRParen, TokenEOF}},
@@ -128,18 +128,18 @@ func TestLexerStringErrors(t *testing.T) {
 }
 
 func TestLexerRateValuesParsed(t *testing.T) {
-	toks, errs := lexAll(t, "60/min")
+	toks, errs := lexAll(t, "(60/min)")
 	if len(errs) > 0 {
 		t.Fatalf("unexpected lex errors: %v", errs)
 	}
-	if toks[0].Kind != TokenRate {
-		t.Fatalf("kind = %v, want RATE", toks[0].Kind)
+	if toks[1].Kind != TokenRate {
+		t.Fatalf("kind = %v, want RATE", toks[1].Kind)
 	}
-	if toks[0].RateCount != 60 || toks[0].RateUnit != "min" {
-		t.Fatalf("rate = %d/%s, want 60/min", toks[0].RateCount, toks[0].RateUnit)
+	if toks[1].RateCount != 60 || toks[1].RateUnit != "min" {
+		t.Fatalf("rate = %d/%s, want 60/min", toks[1].RateCount, toks[1].RateUnit)
 	}
-	if toks[0].Lexeme != "60/min" {
-		t.Fatalf("lexeme = %q, want %q", toks[0].Lexeme, "60/min")
+	if toks[1].Lexeme != "60/min" {
+		t.Fatalf("lexeme = %q, want %q", toks[1].Lexeme, "60/min")
 	}
 }
 
@@ -153,9 +153,10 @@ func TestLexerBadRateUnit(t *testing.T) {
 	}
 }
 
-func TestLexerSlashThenIntDoesNotCombineIntoRate(t *testing.T) {
+func TestLexerOutsideParensDoesNotCombineIntoRate(t *testing.T) {
 	// /60/min must lex as SLASH INT SLASH IDENT — the route-pattern
-	// shape — not SLASH RATE.
+	// shape — not SLASH RATE. Rate recognition only fires inside
+	// parens.
 	toks, errs := lexAll(t, "/60/min")
 	if len(errs) > 0 {
 		t.Fatalf("unexpected lex errors: %v", errs)
