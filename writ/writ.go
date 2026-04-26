@@ -33,12 +33,11 @@ const (
 // A Writ instance is the unit of isolation; tests build a fresh
 // instance per case. Registrations are accepted while the instance
 // is in its initial state and must be complete before [Writ.Load].
-//
-// Task 5 attaches the compiled routing table to this struct.
 type Writ struct {
 	state      atomic.Uint32
 	resolvers  map[string]ResolverFunc
 	formatters map[string]FormatterFunc
+	table      atomic.Pointer[routingTable]
 	writEnv    string
 }
 

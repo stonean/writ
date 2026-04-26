@@ -62,9 +62,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 7. Lifecycle: `Load` orchestration
 
-- [ ] Create `writ/load.go` with `Load(path string) error` running the five passes in order: `parser.Parse` → `pipeline.Elaborate` → `validate` → ambiguity check → `compileRoutes`. Translate parser errors to `Entry{Kind: KindParseFailure}` and elaborator errors to `Entry{Kind: KindElaborationFailure}`. Short-circuit on parse or elaboration failure (do not run subsequent passes).
-- [ ] Implement the lifecycle state machine using `atomic.Uint32`: CAS `stateInit → stateLoading`; on CAS failure when the current state is `stateLoading`, panic with a message naming the concurrent-load violation; on CAS failure when the current state is `stateLoaded`, return an "already loaded" error. On compilation failure roll back to `stateInit`. On success install the `routingTable` via `atomic.Pointer` and CAS `stateLoading → stateLoaded`.
-- [ ] Add unit tests in `writ/load_test.go` covering: parse failure short-circuit (no validation entries), elaboration failure short-circuit, validation failure with non-nil aggregate `*Error`, double-load returns "already loaded" error, concurrent-load panic via two `sync.WaitGroup`-coordinated goroutines.
+- [x] Create `writ/load.go` with `Load(path string) error` running the five passes in order: `parser.Parse` → `pipeline.Elaborate` → `validate` → ambiguity check → `compileRoutes`. Translate parser errors to `Entry{Kind: KindParseFailure}` and elaborator errors to `Entry{Kind: KindElaborationFailure}`. Short-circuit on parse or elaboration failure (do not run subsequent passes).
+- [x] Implement the lifecycle state machine using `atomic.Uint32`: CAS `stateInit → stateLoading`; on CAS failure when the current state is `stateLoading`, panic with a message naming the concurrent-load violation; on CAS failure when the current state is `stateLoaded`, return an "already loaded" error. On compilation failure roll back to `stateInit`. On success install the `routingTable` via `atomic.Pointer` and CAS `stateLoading → stateLoaded`.
+- [x] Add unit tests in `writ/load_test.go` covering: parse failure short-circuit (no validation entries), elaboration failure short-circuit, validation failure with non-nil aggregate `*Error`, double-load returns "already loaded" error, concurrent-load panic via two `sync.WaitGroup`-coordinated goroutines.
 
 **Done when:** every Loading acceptance criterion has a passing test, and the concurrent-load test reliably reproduces the panic with the documented message.
 
