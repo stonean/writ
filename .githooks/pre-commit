@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Fast pre-commit checks: formatting, vet, build.
+# Full verification (linters, security, tests, drift) runs in pre-push.
+set -euo pipefail
+
+echo "→ gofumpt"
+fmt_out=$(gofumpt -l .)
+if [ -n "$fmt_out" ]; then
+  echo "✗ gofumpt: files need formatting:" >&2
+  echo "$fmt_out" >&2
+  echo "  fix with: gofumpt -w ." >&2
+  exit 1
+fi
+
+echo "→ go vet"
+go vet ./...
+
+echo "→ go build"
+go build ./...
+
+echo "✓ pre-commit checks passed"

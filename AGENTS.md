@@ -18,23 +18,40 @@ Per-package verification suite — run every one of these on the affected Go pac
 
 | Tool | Invocation | Purpose |
 | --- | --- | --- |
-| `gofmt` | `gofmt -l <pkg>/` | Empty output means no files need reformatting |
+| `gofumpt` | `gofumpt -l <pkg>/` | Stricter superset of `gofmt`; empty output means no files need reformatting |
 | `go vet` | `go vet ./<pkg>/...` | Catches suspicious constructs the compiler accepts |
 | `staticcheck` | `staticcheck ./<pkg>/...` | Style + correctness checks beyond `go vet` |
 | `errcheck` | `errcheck ./<pkg>/...` | Catches unchecked errors |
 | `golangci-lint` | `golangci-lint run ./<pkg>/...` | Aggregate linter (defaults are sufficient) |
+| `gosec` | `gosec -quiet ./<pkg>/...` | Security-focused static analysis (crypto misuse, path traversal, missing HTTP server timeouts, etc.) |
 | `govulncheck` | `govulncheck ./<pkg>/...` | Known-vulnerability scan |
 | Build | `go build ./<pkg>/...` | Must succeed |
-| Test | `go test ./<pkg>/... -race -shuffle=on -count=1` | Must pass; `-race` catches data races, `-shuffle=on` catches order-dependent tests, `-count=1` defeats the test cache |
+| Test | `go test ./<pkg>/... -race -shuffle=on -count=1 -coverprofile=cover.out` | Must pass; `-race` catches data races, `-shuffle=on` catches order-dependent tests, `-count=1` defeats the test cache |
+| Coverage | `go tool cover -func=cover.out \| tail -1` | Per-package coverage must stay **≥ 80%**; pure-logic packages (`parser`, `pipeline`) should remain **≥ 90%**. Coverage may not regress without justification noted in the commit message. |
 | Module tidy | `go mod tidy && git diff --exit-code go.mod go.sum` | `go.mod`/`go.sum` must be clean — non-empty diff means deps are stale |
 | Generated drift | `go generate ./<pkg>/... && git diff --exit-code` | Generated output must match sources — non-empty diff means a `//go:generate` directive needs to be re-run |
 
+Fuzzing (parser/DSL packages): every user-input boundary should have a `FuzzXxx` test. Seed corpora run automatically as part of `go test`. Before merging changes to the lexer, parser, or pipeline elaboration, run an extended fuzz session per target: `go test ./<pkg>/ -fuzz=FuzzXxx -fuzztime=60s` (Go's `-fuzz` only fuzzes a single target per invocation). Add any failure inputs surfaced by the fuzzer to the seed corpus before fixing the bug.
+
 Tooling notes:
 
-- `staticcheck` and `errcheck` must be built against the module's required Go version (currently 1.26). If a tool refuses to run with a `version mismatch` message, rebuild it: `go install honnef.co/go/tools/cmd/staticcheck@latest`, `go install github.com/kisielk/errcheck@latest`, `go install golang.org/x/vuln/cmd/govulncheck@latest`.
+- `staticcheck`, `errcheck`, `gofumpt`, `gosec`, and `govulncheck` must be built against the module's required Go version (currently 1.26). If a tool refuses to run with a `version mismatch` message, rebuild it: `go install honnef.co/go/tools/cmd/staticcheck@latest`, `go install github.com/kisielk/errcheck@latest`, `go install golang.org/x/vuln/cmd/govulncheck@latest`, `go install mvdan.cc/gofumpt@latest`, `go install github.com/securego/gosec/v2/cmd/gosec@latest`.
 - `staticcheck` and `golangci-lint` may report `unused` warnings during multi-task implementation when an upcoming task wires the constructor or helper. These are acceptable transient warnings — note them in the commit message and confirm they clear when the dependent task lands. Do not suppress with `//nolint`; let them resolve naturally.
-- `golangci-lint` re-runs several of the standalone linters above (`gofmt`, `go vet`, `staticcheck`, `errcheck`) depending on its configuration. Running them individually first is intentional: failures surface faster and with clearer per-tool output.
+- `golangci-lint` re-runs several of the standalone linters above (`go vet`, `staticcheck`, `errcheck`) depending on its configuration. Running them individually first is intentional: failures surface faster and with clearer per-tool output.
 - The module-tidy and generated-drift checks rely on `git diff --exit-code`. Run them from a clean working tree (or stage your intended changes first) so the diff reflects only tool output, not in-progress edits.
+
+## Git Hooks
+
+The verification suite is wired into git hooks under `.githooks/`. Activate them once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+- `.githooks/pre-commit` runs the fast checks (`gofumpt`, `go vet`, `go build`) on every commit so broken or unformatted code never lands.
+- `.githooks/pre-push` runs the full verification suite (linters, security scans, race-enabled tests with coverage, module-tidy and generate drift) before any push to a shared branch.
+
+Hooks fail fast — any check that errors aborts the commit/push. If a hook fails, fix the underlying issue and re-run; do not bypass with `--no-verify` for shared branches.
 
 ## Project Structure
 

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Full verification suite — runs before any push.
+# Mirrors the per-package suite documented in AGENTS.md.
+set -euo pipefail
+
+echo "→ gofumpt"
+fmt_out=$(gofumpt -l .)
+if [ -n "$fmt_out" ]; then
+  echo "✗ gofumpt: files need formatting:" >&2
+  echo "$fmt_out" >&2
+  exit 1
+fi
+
+echo "→ go vet"
+go vet ./...
+
+echo "→ staticcheck"
+staticcheck ./...
+
+echo "→ errcheck"
+errcheck ./...
+
+echo "→ golangci-lint"
+golangci-lint run ./...
+
+echo "→ gosec"
+gosec -quiet ./...
+
+echo "→ govulncheck"
+govulncheck ./...
+
+echo "→ go build"
+go build ./...
+
+echo "→ go test (race, shuffle, coverage)"
+go test ./... -race -shuffle=on -count=1 -coverprofile=cover.out
+
+echo "→ coverage report"
+go tool cover -func=cover.out | tail -1
+
+echo "→ go mod tidy drift"
+go mod tidy
+if ! git diff --quiet -- go.mod go.sum; then
+  echo "✗ go.mod/go.sum changed after 'go mod tidy' — commit the updates" >&2
+  git --no-pager diff -- go.mod go.sum >&2
+  exit 1
+fi
+
+echo "→ go generate drift"
+pre_generate_status=$(git status --porcelain)
+go generate ./...
+post_generate_status=$(git status --porcelain)
+if [ "$pre_generate_status" != "$post_generate_status" ]; then
+  echo "✗ generated output drifted — commit the regenerated files" >&2
+  git --no-pager diff >&2
+  exit 1
+fi
+
+echo "✓ all verification checks passed"

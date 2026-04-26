@@ -378,8 +378,8 @@ func TestParseApproveParenthesesOverridePrecedence(t *testing.T) {
 
 func TestParseRoutePatternForms(t *testing.T) {
 	cases := []struct {
-		name    string
-		pattern string
+		name     string
+		pattern  string
 		segCount int
 	}{
 		{"root", "/", 0},

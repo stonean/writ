@@ -237,4 +237,3 @@ GET /home ->
 		t.Errorf("handlers: combined=%d split=%d", len(a.Handlers), len(b.Handlers))
 	}
 }
-
