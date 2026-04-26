@@ -37,4 +37,4 @@ The README defines Writ's full surface. Each item below is a slice of that surfa
 
 ## Open Items
 
-- {Brief description of an issue and any relevant context}
+- **AI resolver source (Kronk integration)** — optional `Source` adapter that exposes [ardanlabs/kronk](https://github.com/ardanlabs/kronk) (embedded llama.cpp via `hybridgroup/yzma`) as named `ai.*` resolvers/commits (`ai.complete`, `ai.embed`, `ai.rerank`, `ai.classify`). Pairs naturally with SQL-as-resolver for pgvector-backed semantic search. Must be a separate adapter package, not a core dep — Kronk pulls in cgo, Badger, OPA, OTel, and the MCP SDK, which conflicts with "start small, stay small." Spec only when a real consumer surfaces.
