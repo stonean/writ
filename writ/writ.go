@@ -34,11 +34,12 @@ const (
 // instance per case. Registrations are accepted while the instance
 // is in its initial state and must be complete before [Writ.Load].
 //
-// Subsequent tasks attach resolver/formatter registration tables
-// (task 3) and the compiled routing table (task 5) to this struct.
+// Task 5 attaches the compiled routing table to this struct.
 type Writ struct {
-	state   atomic.Uint32
-	writEnv string
+	state      atomic.Uint32
+	resolvers  map[string]ResolverFunc
+	formatters map[string]FormatterFunc
+	writEnv    string
 }
 
 // New returns a fresh runtime instance with no registrations and no
@@ -49,5 +50,9 @@ func New() *Writ {
 	if env == "" {
 		env = defaultWritEnv
 	}
-	return &Writ{writEnv: env}
+	return &Writ{
+		resolvers:  make(map[string]ResolverFunc),
+		formatters: make(map[string]FormatterFunc),
+		writEnv:    env,
+	}
 }

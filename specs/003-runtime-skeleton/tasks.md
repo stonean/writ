@@ -20,11 +20,11 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 3. Function signature types and registration
 
-- [ ] In `writ/register.go`, declare `ResolverFunc` and `FormatterFunc` per the data model.
-- [ ] Implement `Resolver(name string, fn ResolverFunc) error` and `Formatter(name string, fn FormatterFunc) error`. Both:
+- [x] In `writ/register.go`, declare `ResolverFunc` and `FormatterFunc` per the data model.
+- [x] Implement `Resolver(name string, fn ResolverFunc) error` and `Formatter(name string, fn FormatterFunc) error`. Both:
   - return an error if `name` is already registered;
   - panic with a clear message if called when state is not `stateInit`.
-- [ ] Add unit tests in `writ/register_test.go` covering: successful registration, duplicate-name error, post-`Load()` registration panic.
+- [x] Add unit tests in `writ/register_test.go` covering: successful registration, duplicate-name error, post-`Load()` registration panic.
 
 **Done when:** every Construction-and-Registration acceptance criterion has a passing test.
 
