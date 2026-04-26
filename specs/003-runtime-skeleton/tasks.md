@@ -54,9 +54,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 6. Validation pass and route ambiguity
 
-- [ ] Create `writ/validate.go` with `validate(resolved *pipeline.Resolved, resolvers, formatters) []Entry` orchestrating the per-handler walk: defensively check every handler ends in exactly one `format` step (per `system.md` *Pipeline shape* — the elaborator already enforces this for the in-scope subset, but re-check), then call `compileRoutes` from task 5 to surface unsupported-stage / unregistered-name / undeclared-parameter entries.
-- [ ] Add a route-ambiguity check that groups handlers by `(method, canonicalPath)` (canonical path replaces parameter segment names with `:` so `/users/:id` and `/users/:user_id` collide) and emits a `KindRouteAmbiguity` `Entry` per group with size > 1, with the first handler's span as `Span` and the rest as `Spans`.
-- [ ] Add unit tests in `writ/validate_test.go` with one test per `ErrorKind` (`KindUnregisteredResolver`, `KindUnregisteredFormatter`, `KindUnsupportedStage`, `KindUndeclaredRouteParameter`, `KindRouteAmbiguity`) asserting both `Kind` and `Message` shape.
+- [x] Create `writ/validate.go` with `validate(resolved *pipeline.Resolved, resolvers, formatters) []Entry` orchestrating the per-handler walk: defensively check every handler ends in exactly one `format` step (per `system.md` *Pipeline shape* — the elaborator already enforces this for the in-scope subset, but re-check), then call `compileRoutes` from task 5 to surface unsupported-stage / unregistered-name / undeclared-parameter entries.
+- [x] Add a route-ambiguity check that groups handlers by `(method, canonicalPath)` (canonical path replaces parameter segment names with `:` so `/users/:id` and `/users/:user_id` collide) and emits a `KindRouteAmbiguity` `Entry` per group with size > 1, with the first handler's span as `Span` and the rest as `Spans`.
+- [x] Add unit tests in `writ/validate_test.go` with one test per `ErrorKind` (`KindUnregisteredResolver`, `KindUnregisteredFormatter`, `KindUnsupportedStage`, `KindUndeclaredRouteParameter`, `KindRouteAmbiguity`) asserting both `Kind` and `Message` shape.
 
 **Done when:** every Loading-and-Validation acceptance criterion that maps to a runtime-validation pass has at least one passing test.
 
