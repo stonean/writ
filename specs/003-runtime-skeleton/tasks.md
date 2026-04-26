@@ -12,9 +12,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 2. Public accessor types: `Params` and `Results`
 
-- [ ] Create `writ/params.go` with the `Params` struct, `String(name) string`, and `Has(name) bool`.
-- [ ] Create `writ/results.go` with the `Results` struct, `Get(name) any`, and `Has(name) bool`.
-- [ ] Add unit tests in `writ/params_test.go` and `writ/results_test.go` covering present-key, absent-key (zero value), and `Has` true/false cases.
+- [x] Create `writ/params.go` with the `Params` struct, `String(name) string`, and `Has(name) bool`.
+- [x] Create `writ/results.go` with the `Results` struct, `Get(name) any`, and `Has(name) bool`.
+- [x] Add unit tests in `writ/params_test.go` and `writ/results_test.go` covering present-key, absent-key (zero value), and `Has` true/false cases.
 
 **Done when:** unit tests pass and accessors return the documented zero values for missing keys.
 
