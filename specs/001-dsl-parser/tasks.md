@@ -115,13 +115,13 @@ Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by sp
 
 ## 11. Markdown lint
 
-- [ ] Run `npx markdownlint-cli2` on every `.md` file under `specs/001-dsl-parser/`. Fix any violations.
+- [x] Run `npx markdownlint-cli2` on every `.md` file under `specs/001-dsl-parser/`. Fix any violations.
 
 **Done when:** markdownlint exits clean on `spec.md`, `plan.md`, `data-model.md`, and `tasks.md`.
 
 ## 12. Status transition
 
-- [ ] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
-- [ ] Update `spec.md` status from `clarified` to `in-progress` only after task 1 begins. (The plan command transitions to `planned`; the implement command transitions to `in-progress`.)
+- [x] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
+- [x] Update `spec.md` status from `clarified` to `in-progress` only after task 1 begins. (The plan command transitions to `planned`; the implement command transitions to `in-progress`.)
 
 **Done when:** the user has confirmed the plan and the spec status reads `planned`.

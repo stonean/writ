@@ -1,6 +1,6 @@
 # 001 — DSL Parser
 
-**Status:** in-progress
+**Status:** done
 **Dependencies:** none
 
 The DSL parser turns one or more `.writ` files into a single in-memory representation — an Abstract Syntax Tree (AST) — that downstream features (the pipeline runtime, code generation, the `writ show` and `writ routes` CLIs) consume. The parser is purely syntactic: it recognizes the constructs documented in the README's *DSL Syntax* section, flattens includes, and reports structured errors. It does no semantic checking — name registration, field references, dependency cycles, and pairing rules are all the responsibility of later stages.
@@ -146,64 +146,64 @@ These spellings are illustrative. Plan phase resolves the exact package, type, a
 
 ### Constructs and Containment
 
-- [ ] Parsing a `.writ` file containing a `system` block, multiple `group` blocks, multiple handler blocks, and one or more `errors` blocks produces an AST that contains a node for each construct.
-- [ ] All keywords in the README's *DSL Syntax* section are recognized as contextual keywords: `system`, `group`, `errors`, `include`, `log`, `measure`, `session`, `csrf`, `limit`, `approve`, `resolve`, `commit`, `emit`, `format`, `redirect`, `layout`, `none`, `OR`, `AND`, `NOT`, `with`, `using`, `body`, `query`, and `default`.
-- [ ] An identifier whose segments include a keyword word (e.g., `db.session.refresh`, `auth.with.something`) parses as a normal identifier in any identifier position.
-- [ ] Any uppercase ASCII identifier matching `[A-Z][A-Z0-9-]*` is accepted as a handler-block-header method, including `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and non-standard methods like `MKCOL`, `PROPFIND`, `PURGE`, `M-SEARCH`.
-- [ ] A lowercase method (e.g., `get`) at handler-block-header position is a parse error.
-- [ ] An empty block (a block header followed by no statements, ignoring blank and comment-only lines) is a parse error that names the block and its location.
+- [x] Parsing a `.writ` file containing a `system` block, multiple `group` blocks, multiple handler blocks, and one or more `errors` blocks produces an AST that contains a node for each construct.
+- [x] All keywords in the README's *DSL Syntax* section are recognized as contextual keywords: `system`, `group`, `errors`, `include`, `log`, `measure`, `session`, `csrf`, `limit`, `approve`, `resolve`, `commit`, `emit`, `format`, `redirect`, `layout`, `none`, `OR`, `AND`, `NOT`, `with`, `using`, `body`, `query`, and `default`.
+- [x] An identifier whose segments include a keyword word (e.g., `db.session.refresh`, `auth.with.something`) parses as a normal identifier in any identifier position.
+- [x] Any uppercase ASCII identifier matching `[A-Z][A-Z0-9-]*` is accepted as a handler-block-header method, including `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and non-standard methods like `MKCOL`, `PROPFIND`, `PURGE`, `M-SEARCH`.
+- [x] A lowercase method (e.g., `get`) at handler-block-header position is a parse error.
+- [x] An empty block (a block header followed by no statements, ignoring blank and comment-only lines) is a parse error that names the block and its location.
 
 ### Lexical Forms
 
-- [ ] Identifiers match `[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*` — ASCII only, segment-leading letter, no consecutive/leading/trailing dots.
-- [ ] Decimal integer literals match `-?[0-9]+`. No underscores, hex, octal, scientific notation, or floats.
-- [ ] String literals are double-quoted; supported escapes are `\"`, `\\`, `\n`, `\t`, `\r`, and no others. Raw newlines inside strings, unterminated strings, and unknown escape sequences are parse errors.
-- [ ] Rate literals match `<integer>/<unit>` where `<unit>` is one of `sec`, `min`, `hour`, `day`. Other unit names are parse errors.
-- [ ] Line comments begin with `#` and run to end-of-line. They are stripped from the parsed output and do not appear in the AST. There is no block-comment form.
-- [ ] Indentation: any line that begins with leading whitespace (tab, space, or mix) is a continuation of the open block; a line that begins at column 0 is a new top-level construct or terminates the open block. The parser does not validate indentation character or width.
+- [x] Identifiers match `[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*` — ASCII only, segment-leading letter, no consecutive/leading/trailing dots.
+- [x] Decimal integer literals match `-?[0-9]+`. No underscores, hex, octal, scientific notation, or floats.
+- [x] String literals are double-quoted; supported escapes are `\"`, `\\`, `\n`, `\t`, `\r`, and no others. Raw newlines inside strings, unterminated strings, and unknown escape sequences are parse errors.
+- [x] Rate literals match `<integer>/<unit>` where `<unit>` is one of `sec`, `min`, `hour`, `day`. Other unit names are parse errors.
+- [x] Line comments begin with `#` and run to end-of-line. They are stripped from the parsed output and do not appear in the AST. There is no block-comment form.
+- [x] Indentation: any line that begins with leading whitespace (tab, space, or mix) is a continuation of the open block; a line that begins at column 0 is a new top-level construct or terminates the open block. The parser does not validate indentation character or width.
 
 ### Value References and Calls
 
-- [ ] Each value reference form parses to a distinct AST node kind: route parameter (`:id`), field access (`:user.id`, including multi-level `:user.team.id`), static named arg (`limit=10`, `status="active"`), typed body (`body CreateUserInput`), typed query (`query ListUsersQuery`).
-- [ ] A call argument list may be empty (`db.users.list()` is valid).
+- [x] Each value reference form parses to a distinct AST node kind: route parameter (`:id`), field access (`:user.id`, including multi-level `:user.team.id`), static named arg (`limit=10`, `status="active"`), typed body (`body CreateUserInput`), typed query (`query ListUsersQuery`).
+- [x] A call argument list may be empty (`db.users.list()` is valid).
 
 ### Approve Expressions
 
-- [ ] An `approve` expression with `OR`, `AND`, `NOT`, and parentheses parses with `NOT > AND > OR` precedence; `NOT` is right-associative; `AND` and `OR` are left-associative.
-- [ ] Parentheses in an `approve` expression override the default precedence and are accepted at any level of nesting.
+- [x] An `approve` expression with `OR`, `AND`, `NOT`, and parentheses parses with `NOT > AND > OR` precedence; `NOT` is right-associative; `AND` and `OR` are left-associative.
+- [x] Parentheses in an `approve` expression override the default precedence and are accepted at any level of nesting.
 
 ### Routes
 
-- [ ] Route patterns parse as `/` followed by zero or more `/`-separated segments. Each segment is a literal (`[a-zA-Z0-9_-]+`), a parameter (`:` + literal), or a wildcard (`*`).
-- [ ] A wildcard segment is only valid as the final segment; `/users/*/posts` is a parse error.
-- [ ] Empty segments (`//users`) and trailing slashes (`/users/`) are parse errors. The root pattern `/` is valid.
+- [x] Route patterns parse as `/` followed by zero or more `/`-separated segments. Each segment is a literal (`[a-zA-Z0-9_-]+`), a parameter (`:` + literal), or a wildcard (`*`).
+- [x] A wildcard segment is only valid as the final segment; `/users/*/posts` is a parse error.
+- [x] Empty segments (`//users`) and trailing slashes (`/users/`) are parse errors. The root pattern `/` is valid.
 
 ### Multiple Format Lines and `none`
 
-- [ ] Multiple `format` lines in a single handler parse as an ordered list (for content negotiation), not as a duplicate-key error.
-- [ ] An explicit `<stage> none` is preserved in the AST as a distinct node from "stage not declared," so the runtime can distinguish opt-out from inheritance.
+- [x] Multiple `format` lines in a single handler parse as an ordered list (for content negotiation), not as a duplicate-key error.
+- [x] An explicit `<stage> none` is preserved in the AST as a distinct node from "stage not declared," so the runtime can distinguish opt-out from inheritance.
 
 ### Includes
 
-- [ ] An `include` statement is valid at any column-0 position in the root file; placement does not affect the resulting AST beyond document order.
-- [ ] Parsing a root file that `include`s another file produces an AST equivalent to one parsed from a single file with the included contents inlined at the include point.
-- [ ] `include` paths must end in `.writ` (case-sensitive); other extensions are a parse error.
-- [ ] An include cycle (file A includes file B includes file A) is reported as a structured error with file/line/column, not as a stack overflow.
-- [ ] A `system` block declared in an included file is reported as an error with location.
-- [ ] A missing include file is reported as an error with the location of the `include` statement.
+- [x] An `include` statement is valid at any column-0 position in the root file; placement does not affect the resulting AST beyond document order.
+- [x] Parsing a root file that `include`s another file produces an AST equivalent to one parsed from a single file with the included contents inlined at the include point.
+- [x] `include` paths must end in `.writ` (case-sensitive); other extensions are a parse error.
+- [x] An include cycle (file A includes file B includes file A) is reported as a structured error with file/line/column, not as a stack overflow.
+- [x] A `system` block declared in an included file is reported as an error with location.
+- [x] A missing include file is reported as an error with the location of the `include` statement.
 
 ### Errors and Recovery
 
-- [ ] Every parse error carries a file path, line number, column number, and a human-readable message.
-- [ ] When a single file contains multiple syntax errors, the parser reports more than one in a single pass (it does not abort on the first).
-- [ ] The parser always returns a non-nil AST root; on failure, the AST contains every construct that parsed successfully, and the returned error list is the authoritative success indicator.
+- [x] Every parse error carries a file path, line number, column number, and a human-readable message.
+- [x] When a single file contains multiple syntax errors, the parser reports more than one in a single pass (it does not abort on the first).
+- [x] The parser always returns a non-nil AST root; on failure, the AST contains every construct that parsed successfully, and the returned error list is the authoritative success indicator.
 
 ### Source Locations and Determinism
 
-- [ ] Every AST node carries the source location *range* it spans — starting `(file, line, column)` to ending `(file, line, column)` — referencing the original file the construct was written in, not the post-flatten position in the root file.
-- [ ] The parser keeps original source bytes addressable so consumers can extract the verbatim source text for any node via its span. The parser does not duplicate raw source text into AST nodes.
-- [ ] Parsing the same input twice produces equivalent ASTs (no time-, environment-, or order-dependent variation).
-- [ ] The parser performs no I/O beyond reading the files it is given (no network, no environment reads, no logging).
+- [x] Every AST node carries the source location *range* it spans — starting `(file, line, column)` to ending `(file, line, column)` — referencing the original file the construct was written in, not the post-flatten position in the root file.
+- [x] The parser keeps original source bytes addressable so consumers can extract the verbatim source text for any node via its span. The parser does not duplicate raw source text into AST nodes.
+- [x] Parsing the same input twice produces equivalent ASTs (no time-, environment-, or order-dependent variation).
+- [x] The parser performs no I/O beyond reading the files it is given (no network, no environment reads, no logging).
 
 ## Open Questions
 

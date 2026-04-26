@@ -21,14 +21,24 @@ import (
 // ===== Constructs and Containment =====
 
 func TestAcceptanceFullProgramContainsEveryConstruct(t *testing.T) {
+	// Spec acceptance: "Parsing a .writ file containing a system block,
+	// multiple group blocks, multiple handler blocks, and one or more
+	// errors blocks produces an AST that contains a node for each
+	// construct."
 	src := `system ->
   log :id
 
 group /admin/* ->
   approve auth.isAdmin
 
+group /api/* ->
+  csrf none
+
 errors /admin/* ->
   NotFound notFoundJSON
+  default defaultJSON
+
+errors /api/* ->
   default defaultJSON
 
 GET /users/:id ->
@@ -44,11 +54,11 @@ POST /users ->
 	if prog.System == nil {
 		t.Errorf("missing system block")
 	}
-	if len(prog.Groups) != 1 {
-		t.Errorf("groups = %d, want 1", len(prog.Groups))
+	if len(prog.Groups) != 2 {
+		t.Errorf("groups = %d, want 2", len(prog.Groups))
 	}
-	if len(prog.Errors) != 1 {
-		t.Errorf("errors blocks = %d, want 1", len(prog.Errors))
+	if len(prog.Errors) != 2 {
+		t.Errorf("errors blocks = %d, want 2", len(prog.Errors))
 	}
 	if len(prog.Handlers) != 2 {
 		t.Errorf("handlers = %d, want 2", len(prog.Handlers))
