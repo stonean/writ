@@ -70,10 +70,10 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 8. Request dispatch
 
-- [ ] Create `writ/dispatch.go` with `(*Writ).ServeHTTP(http.ResponseWriter, *http.Request)`, `writeRecorder`, `paramsForCall(params Params, paramArgs []string) Params`, `buildResults(resultsMap map[string]any, with []string) Results`, and `write500(w http.ResponseWriter, msg string)`.
-- [ ] `ServeHTTP` flow: load state guard (defensive), `routingTable.match`, on miss/405 write the appropriate response with sorted `Allow`, on hit run resolves sequentially writing the resolver result into a per-request `map[string]any`, then call the formatter via the wrapped `writeRecorder`. On resolver error or pre-write formatter error, call `write500`.
-- [ ] `Handler() http.Handler`: panic when state is not `stateLoaded`; otherwise return `w` (which implements `http.Handler` via `ServeHTTP`).
-- [ ] Add unit tests in `writ/dispatch_test.go` covering: 200/JSON happy path with parameter binding (use `httptest.NewServer`), multiple sequential resolves with results passed to formatter, resolver-error → 500 + `Content-Type: text/plain; charset=utf-8`, formatter pre-write error → 500, formatter-status-override (e.g., 201) preserved, zero-resolve handler → empty `Results`, formatter receives only `with`-listed names, request isolation (two concurrent requests do not share state).
+- [x] Create `writ/dispatch.go` with `(*Writ).ServeHTTP(http.ResponseWriter, *http.Request)`, `writeRecorder`, `paramsForCall(params Params, paramArgs []string) Params`, `buildResults(resultsMap map[string]any, with []string) Results`, and `write500(w http.ResponseWriter)`. (Dropped the `msg` argument from `write500` — the message would only be useful for future logging features and was unused at every call site, per the constitution's no-speculative-API rule.)
+- [x] `ServeHTTP` flow: load state guard (defensive), `routingTable.match`, on miss/405 write the appropriate response with sorted `Allow`, on hit run resolves sequentially writing the resolver result into a per-request `map[string]any`, then call the formatter via the wrapped `writeRecorder`. On resolver error or pre-write formatter error, call `write500`.
+- [x] `Handler() http.Handler`: panic when state is not `stateLoaded`; otherwise return `w` (which implements `http.Handler` via `ServeHTTP`).
+- [x] Add unit tests in `writ/dispatch_test.go` covering: 200/JSON happy path with parameter binding (use `httptest.NewServer`), multiple sequential resolves with results passed to formatter, resolver-error → 500 + `Content-Type: text/plain; charset=utf-8`, formatter pre-write error → 500, formatter-status-override (e.g., 201) preserved, zero-resolve handler → empty `Results`, formatter receives only `with`-listed names, request isolation (two concurrent requests do not share state).
 
 **Done when:** every Resolve, Format, and Lifecycle/HTTP-Boundary acceptance criterion has a passing test.
 
