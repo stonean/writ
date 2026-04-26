@@ -1,6 +1,6 @@
 # 003 — Runtime Skeleton + HTTP Dispatch
 
-**Status:** planned
+**Status:** in-progress
 **Dependencies:** 001-dsl-parser, 002-pipeline-elaboration
 
 The runtime skeleton is the first end-to-end execution path through Writ: parse a `.writ` file, elaborate the pipeline, register Go resolvers and formatters, bind an HTTP listener, dispatch incoming requests to the right handler, run the resolve and format stages, and write the response. It is the smallest amount of code that proves the framework actually serves a request.

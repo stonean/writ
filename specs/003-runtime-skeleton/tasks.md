@@ -4,9 +4,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 1. Package skeleton and constants
 
-- [ ] Create `writ/doc.go` with the package comment declaring `writ` as the runtime entry point and exported but unstable pre-1.0 (matching the AST and pipeline packages).
-- [ ] Create `writ/writ.go` with the `Writ` struct (unexported fields per data-model), the `New() *Writ` constructor, the `defaultPort` and `defaultWritEnv` constants, and the lifecycle state constants (`stateInit`, `stateLoading`, `stateLoaded`).
-- [ ] Confirm `go build ./writ/...` and `go vet ./writ/...` are clean on the empty package.
+- [x] Create `writ/doc.go` with the package comment declaring `writ` as the runtime entry point and exported but unstable pre-1.0 (matching the AST and pipeline packages).
+- [x] Create `writ/writ.go` with the `Writ` struct (unexported fields per data-model), the `New() *Writ` constructor, the `defaultPort` and `defaultWritEnv` constants, and the lifecycle state constants (`stateInit`, `stateLoading`, `stateLoaded`).
+- [x] Confirm `go build ./writ/...` and `go vet ./writ/...` are clean on the empty package.
 
 **Done when:** the package compiles and `go vet` is clean.
 
