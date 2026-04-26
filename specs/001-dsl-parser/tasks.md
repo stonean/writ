@@ -94,22 +94,22 @@ Note: a `parseSession` struct now holds the cfg, cycle stack, source registry, a
 
 Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by spec section. Use `parser.ParseString` with table-driven cases for the lexical and value-reference criteria; use `parser/testdata/*.writ` fixtures for include and multi-file criteria.
 
-- [ ] **Constructs and Containment** — every checkbox: full-program parse, every keyword recognized contextually, identifier-with-keyword-segment, every uppercase-method case, lowercase-method rejected, empty-block rejected.
-- [ ] **Lexical Forms** — every checkbox: identifier grammar, integer grammar, string escapes, rate units, comments, indentation permissiveness.
-- [ ] **Value References and Calls** — distinct node kinds for each form, empty argument list.
-- [ ] **Approve Expressions** — precedence and associativity table-driven, parenthesization.
-- [ ] **Routes** — segment grammar, wildcard-only-final, empty-segment rejection, trailing-slash rejection, root-pattern accepted.
-- [ ] **Multiple Format Lines and `none`** — ordered list preserved, `NoneStmt` is a distinct node kind.
-- [ ] **Includes** — every checkbox: placement-independent flattening, cycle reporting, system-in-include rejection, missing-file reporting, `.writ`-extension enforcement.
-- [ ] **Errors and Recovery** — every error carries `(file, line, column, message)`, multiple-errors-per-pass, AST always non-nil.
-- [ ] **Source Locations and Determinism** — every node has a span starting and ending in its originating file, span text round-trips to the original bytes, parsing the same input twice produces structurally equal ASTs, no I/O beyond requested file reads.
+- [x] **Constructs and Containment** — every checkbox: full-program parse, every keyword recognized contextually, identifier-with-keyword-segment, every uppercase-method case, lowercase-method rejected, empty-block rejected.
+- [x] **Lexical Forms** — every checkbox: identifier grammar, integer grammar, string escapes, rate units, comments, indentation permissiveness.
+- [x] **Value References and Calls** — distinct node kinds for each form, empty argument list.
+- [x] **Approve Expressions** — precedence and associativity table-driven, parenthesization.
+- [x] **Routes** — segment grammar, wildcard-only-final, empty-segment rejection, trailing-slash rejection, root-pattern accepted.
+- [x] **Multiple Format Lines and `none`** — ordered list preserved, `NoneStmt` is a distinct node kind.
+- [x] **Includes** — every checkbox: placement-independent flattening, cycle reporting, system-in-include rejection, missing-file reporting, `.writ`-extension enforcement.
+- [x] **Errors and Recovery** — every error carries `(file, line, column, message)`, multiple-errors-per-pass, AST always non-nil.
+- [x] **Source Locations and Determinism** — every node has a span starting and ending in its originating file, span text round-trips to the original bytes, parsing the same input twice produces structurally equal ASTs, no I/O beyond requested file reads.
 
 **Done when:** every acceptance-criteria checkbox in `spec.md` has at least one corresponding passing test, and `go test ./parser/... ./ast/...` is green.
 
 ## 10. Determinism and "no I/O" guards
 
-- [ ] Add a test that parses the same fixture twice and compares ASTs structurally (walking spans by `(Path, Line, Column, Offset)`).
-- [ ] Add a test that runs `Parse` against an `fs.FS` that records every `Open` call, and assert that no file outside the include graph is opened (no environment reads, no working-directory walks).
+- [x] Add a test that parses the same fixture twice and compares ASTs structurally (walking spans by `(Path, Line, Column, Offset)`).
+- [x] Add a test that runs `Parse` against an `fs.FS` that records every `Open` call, and assert that no file outside the include graph is opened (no environment reads, no working-directory walks).
 
 **Done when:** both tests pass.
 
