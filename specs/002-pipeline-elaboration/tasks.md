@@ -29,9 +29,9 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 4. Matching-set construction with ambiguity detection
 
-- [ ] Create `pipeline/match.go` with a generic-shaped helper `findKept[T any](candidates []T, patternOf func(T) *ast.RoutePattern, target *ast.RoutePattern) (kept []T, conflicting []T)` that returns the matching containment-chain set and the conflicting set per the plan's algorithm.
-- [ ] Add `sortBySpecificity[T any](kept []T, patternOf func(T) *ast.RoutePattern, declOrder func(T) int)` that sorts least-specific to most-specific, breaking ties on declaration order.
-- [ ] Add unit tests in `pipeline/match_test.go` covering: no matches, single match, two-group containment chain, three-group containment chain, two groups overlapping without containment, a chain plus an unrelated overlapping group (chain kept, unrelated group conflicting), equal patterns (treated as containment chain in declaration order).
+- [x] Create `pipeline/match.go` with a generic-shaped helper `findKept[T any](candidates []T, patternOf func(T) *ast.RoutePattern, target *ast.RoutePattern) (kept []T, conflicting []T)` that returns the matching containment-chain set and the conflicting set per the plan's algorithm.
+- [x] Add `sortBySpecificity[T any](kept []T, patternOf func(T) *ast.RoutePattern, declOrder func(T) int)` that sorts least-specific to most-specific, breaking ties on declaration order.
+- [x] Add unit tests in `pipeline/match_test.go` covering: no matches, single match, two-group containment chain, three-group containment chain, two groups overlapping without containment, a chain plus an unrelated overlapping group (chain kept, unrelated group conflicting), equal patterns (treated as containment chain in declaration order).
 
 **Done when:** every matching-set scenario in the spec's *Group Membership* and *Errors Block Selection* sections has a passing unit test.
 

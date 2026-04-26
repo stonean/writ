@@ -117,11 +117,13 @@ Helpers built on `containsAll`:
 
 For each handler:
 
-1. Walk all `Program.Groups`; collect every group whose pattern contains the handler's pattern (i.e., `containsAll(handler.Pattern, group.Pattern)`).
-2. Identify "conflicting" groups — any group `Gi` that has at least one peer `Gj` where neither `containsAll(Gi, Gj)` nor `containsAll(Gj, Gi)` holds. These are the groups whose specificity is undefined relative to a sibling.
-3. The "kept" set is matching groups minus conflicting groups. By construction the kept set forms a clean containment chain (every pair is comparable).
-4. If the conflicting set is non-empty, emit one `AmbiguousGroup` error whose `Span` is the handler block and whose `Spans` lists every conflicting group's span. Per the spec's "the handler's resolved entry inherits only from the system block (skipping every conflicting group)", the kept set is still used; the spec's *Resolved Questions* example "When a containment chain exists alongside an unrelated overlapping group, only the unrelated group is reported as ambiguous; the chain layers normally" is satisfied because only the overlapping group ends up in the conflicting set.
-5. Sort the kept set by specificity, least-specific first. Sorting uses `strictlyContains` as the comparator. When two kept groups have equal patterns, the one declared earlier in the AST sorts first (deterministic tiebreak).
+1. Walk all `Program.Groups`; collect every group whose pattern contains the handler's pattern (i.e., `containsAll(handler.Pattern, group.Pattern)`). Call this the matching set.
+2. The naive "any non-containment overlap → conflicting" rule is wrong: in `{ /*, /admin/*, /:tenant/users/* }`, `/admin/*` and `/:tenant/users/*` overlap without containment, but `/admin/*` should still be kept because it belongs to the `{ /*, /admin/* }` chain. The spec's clarifying acceptance criterion ("when a containment chain exists alongside an unrelated overlapping group, only the unrelated group is reported as ambiguous; the chain layers normally") means we want the maximum chain among matching groups, with outliers reported as conflicting.
+3. Iteratively remove the most-conflicting matching group until no non-containment overlap remains among the remaining set. At each step, pick the group with the most conflict-pairs against still-active peers; tiebreak by fewer chain partners; final tiebreak by later declaration order. The picked group moves to the conflicting set; the others stay active.
+4. If conflicts existed at any point in step 3 and fewer than two active groups remain, move the survivors to the conflicting set too. This matches the spec's "the handler's resolved entry inherits only from the system block (skipping every conflicting group)" rule for the simple two-group overlap case where no chain of length ≥ 2 exists.
+5. The kept set is the active groups after step 4, in declaration order. The conflicting set is the rest, also in declaration order.
+6. If the conflicting set is non-empty, emit one `AmbiguousGroup` error whose `Span` is the handler block and whose `Spans` lists every conflicting group's span.
+7. Sort the kept set by specificity, least-specific first. Sorting uses `strictlyContains` as the comparator. When two kept groups have equal patterns, the one declared earlier in the AST sorts first (deterministic tiebreak).
 
 The same algorithm runs for `errors` blocks, producing a kept set of `*ast.ErrorsBlock` and an `AmbiguousErrorsBlock` error when conflicts exist.
 
