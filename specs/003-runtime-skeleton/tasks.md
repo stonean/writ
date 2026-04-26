@@ -39,16 +39,16 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 5. Route compilation and matching
 
-- [ ] Create `writ/route.go` with `routingTable`, `compiledRoute`, `resolveStep`, and `formatStep` per the data model.
-- [ ] Implement `compileRoutes(resolved *pipeline.Resolved, resolvers map[string]ResolverFunc, formatters map[string]FormatterFunc) (*routingTable, []Entry)`. Walk every handler in `resolved.Handlers`:
+- [x] Create `writ/route.go` with `routingTable`, `compiledRoute`, `resolveStep`, and `formatStep` per the data model.
+- [x] Implement `compileRoutes(resolved *pipeline.Resolved, resolvers map[string]ResolverFunc, formatters map[string]FormatterFunc) (*routingTable, []Entry)`. Walk every handler in `resolved.Handlers`:
   - For each `pipeline.Stage`, dispatch on `Kind()`: `StageResolve` → append a `resolveStep` with the registered fn (or emit `Entry{Kind: KindUnregisteredResolver}`); `StageFormat` → set `format` with the registered fn (or emit `Entry{Kind: KindUnregisteredFormatter}`); anything else → emit `Entry{Kind: KindUnsupportedStage}`.
-  - Validate every `:name` argument against `paramNames`; emit `Entry{Kind: KindUndeclaredRouteParameter}` for misses.
+  - Validate every `:name` argument against `paramNames`; emit `Entry{Kind: KindUndeclaredRouteParameter}` for misses. Non-`:name` argument shapes (NamedArg literals, FieldRef, BodyRef, QueryRef) are reported under the same kind with a clarifying message because the skeleton has no separate "unsupported argument shape" kind.
   - Append the compiled route to `byMethod[handler.Method]` and add the method to `methods` (deduped, sorted at the end).
-- [ ] Implement `(*routingTable).match(method, path string) (*compiledRoute, Params, []string)`:
+- [x] Implement `(*routingTable).match(method, path string) (*compiledRoute, Params, []string)`:
   - Walk `byMethod[method]` in declaration order; for each route compare segment count; segment-by-segment compare literal/parameter; first match wins, return the route plus a populated `Params`.
   - On no match for the method, walk every method's routes computing the path-only match set; return `nil, Params{}, sorted methods` for a 405 signal.
   - On no match anywhere, return `nil, Params{}, nil` for a 404 signal.
-- [ ] Add unit tests in `writ/route_test.go` covering: literal-only path, parameter binding, segment-count mismatch, method mismatch with sorted `Allow`, trailing-slash strict (`/users` vs `/users/`), multi-method same-path Allow construction.
+- [x] Add unit tests in `writ/route_test.go` covering: literal-only path, parameter binding, segment-count mismatch, method mismatch with sorted `Allow`, trailing-slash strict (`/users` vs `/users/`), multi-method same-path Allow construction.
 
 **Done when:** every Routing acceptance criterion has at least one passing test, and `match` returns deterministic output across repeated calls.
 
