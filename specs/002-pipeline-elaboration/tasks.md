@@ -78,18 +78,18 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by spec section. Use `parser.ParseString` to feed `Elaborate` so tests round-trip through the real parser; use small in-memory `.writ` strings where possible and `pipeline/testdata/*.writ` fixtures where larger sources help readability.
 
-- [ ] **Single-Instance Override** — every checkbox: system-only inheritance, group-only inheritance, handler override, `approve none`, every single-instance kind covered, `layout none` opt-out distinct from default.
-- [ ] **Multi-Instance Composition** — every checkbox: system + handler list ordering, three-level layering, two-group containment ordering, source-order preservation within a level, `resolve none` clears inheritance, `commit` and `emit` follow the same rules, observational composition with source-order positioning.
-- [ ] **Group Membership** — every checkbox: containment match, non-match, no-group-only-system, parameter-segment containment.
-- [ ] **Nested Group Layering** — every checkbox: containment-chain layering, less-specific fills gaps, multi-instance ordering across nested groups.
-- [ ] **Errors Block Selection** — every checkbox: layered specificity, most-specific wins per type, no-match empty map, reachable from handler entry, source-span preservation.
-- [ ] **Ambiguous Errors Block Membership** — every checkbox: ambiguity error span list, kept chain after ambiguity, empty map when no clean chain remains.
-- [ ] **Canonical Stage Order** — every checkbox: canonical-order handler clean, non-canonical handler reports + still resolves, system/group order check, observational exemption, error carries file/line/column/message, offending statement still placed canonically.
-- [ ] **Source Provenance** — every checkbox: span references the originating declaration, post-include-flatten spans still point at original files.
+- [x] **Single-Instance Override** — every checkbox: system-only inheritance, group-only inheritance, handler override, `approve none`, every single-instance kind covered, `layout none` opt-out distinct from default.
+- [x] **Multi-Instance Composition** — every checkbox: system + handler list ordering, three-level layering, two-group containment ordering, source-order preservation within a level, `resolve none` clears inheritance, `commit` and `emit` follow the same rules, observational composition with source-order positioning.
+- [x] **Group Membership** — every checkbox: containment match, non-match, no-group-only-system, parameter-segment containment.
+- [x] **Nested Group Layering** — every checkbox: containment-chain layering, less-specific fills gaps, multi-instance ordering across nested groups.
+- [x] **Errors Block Selection** — every checkbox: layered specificity, most-specific wins per type, no-match empty map, reachable from handler entry, source-span preservation.
+- [x] **Ambiguous Errors Block Membership** — every checkbox: ambiguity error span list, kept chain after ambiguity, empty map when no clean chain remains.
+- [x] **Canonical Stage Order** — every checkbox: canonical-order handler clean, non-canonical handler reports + still resolves, system/group order check, observational exemption, error carries file/line/column/message, offending statement still placed canonically.
+- [x] **Source Provenance** — every checkbox: span references the originating declaration, post-include-flatten spans still point at original files.
 - [ ] **Determinism** — same-input → same-output structural equality (covered in task 10), no I/O during elaboration.
-- [ ] **Empty / Non-Existent Stages** — every checkbox: absent vs `none` distinction, system-block-only program produces zero handlers, partial handler nodes skipped silently, partial system block treated as absent.
-- [ ] **Stage-Placement Errors** — every checkbox: `format` in system, `format` in group, `redirect` in system or group, `format none` and `redirect none` at any level, every error carries file/line/column/message, non-nil `Resolved` on failure, multiple violations in single pass.
-- [ ] **Ambiguous Group Membership** — every checkbox: ambiguity error fires, spans list every conflicting group + handler, system-only inheritance for affected handler, three-group chain produces no error, chain plus unrelated overlap reports only the unrelated group.
+- [x] **Empty / Non-Existent Stages** — every checkbox: absent vs `none` distinction, system-block-only program produces zero handlers, partial handler nodes skipped silently, partial system block treated as absent.
+- [x] **Stage-Placement Errors** — every checkbox: `format` in system, `format` in group, `redirect` in system or group, `format none` and `redirect none` at any level, every error carries file/line/column/message, non-nil `Resolved` on failure, multiple violations in single pass.
+- [x] **Ambiguous Group Membership** — every checkbox: ambiguity error fires, spans list every conflicting group + handler, system-only inheritance for affected handler, three-group chain produces no error, chain plus unrelated overlap reports only the unrelated group.
 
 **Done when:** every acceptance-criteria checkbox in `spec.md` has at least one corresponding passing test, and `go test ./pipeline/... ./ast/... ./parser/...` is green.
 
