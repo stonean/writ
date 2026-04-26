@@ -86,7 +86,7 @@ Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by sp
 - [x] **Ambiguous Errors Block Membership** — every checkbox: ambiguity error span list, kept chain after ambiguity, empty map when no clean chain remains.
 - [x] **Canonical Stage Order** — every checkbox: canonical-order handler clean, non-canonical handler reports + still resolves, system/group order check, observational exemption, error carries file/line/column/message, offending statement still placed canonically.
 - [x] **Source Provenance** — every checkbox: span references the originating declaration, post-include-flatten spans still point at original files.
-- [ ] **Determinism** — same-input → same-output structural equality (covered in task 10), no I/O during elaboration.
+- [x] **Determinism** — same-input → same-output structural equality (covered in task 10), no I/O during elaboration.
 - [x] **Empty / Non-Existent Stages** — every checkbox: absent vs `none` distinction, system-block-only program produces zero handlers, partial handler nodes skipped silently, partial system block treated as absent.
 - [x] **Stage-Placement Errors** — every checkbox: `format` in system, `format` in group, `redirect` in system or group, `format none` and `redirect none` at any level, every error carries file/line/column/message, non-nil `Resolved` on failure, multiple violations in single pass.
 - [x] **Ambiguous Group Membership** — every checkbox: ambiguity error fires, spans list every conflicting group + handler, system-only inheritance for affected handler, three-group chain produces no error, chain plus unrelated overlap reports only the unrelated group.
@@ -95,14 +95,14 @@ Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by sp
 
 ## 10. Determinism and "no I/O" guards
 
-- [ ] Add a test that elaborates the same parsed program twice and walks both `*Resolved` values asserting structural equality (handler count, per-handler `Stages` kind+span+source-level sequence, `OptOuts` kind+span sequence, `ErrorMap` entry sequence).
-- [ ] Add a test that runs `Elaborate` while a `t.Cleanup`-restored hook (or a build-tag-gated panic) would fire if the package opened files, accessed environment, or started goroutines. Simplest implementation: assert via code review checklist plus a `go vet`-style check that no `os.`, `time.`, `net.`, `runtime.NumGoroutine`, or `go func` appears in the package source. Document the assertion in the test file's comment.
+- [x] Add a test that elaborates the same parsed program twice and walks both `*Resolved` values asserting structural equality (handler count, per-handler `Stages` kind+span+source-level sequence, `OptOuts` kind+span sequence, `ErrorMap` entry sequence).
+- [x] Add a test that runs `Elaborate` while a `t.Cleanup`-restored hook (or a build-tag-gated panic) would fire if the package opened files, accessed environment, or started goroutines. Simplest implementation: assert via code review checklist plus a `go vet`-style check that no `os.`, `time.`, `net.`, `runtime.NumGoroutine`, or `go func` appears in the package source. Document the assertion in the test file's comment.
 
 **Done when:** both tests pass and the no-I/O assertion mechanism is in the test file as either a runtime check or a documented source-grep with a CI hook.
 
 ## 11. Markdown lint
 
-- [ ] Run `npx markdownlint-cli2` on every `.md` file under `specs/002-pipeline-elaboration/`. Fix any violations.
+- [x] Run `npx markdownlint-cli2` on every `.md` file under `specs/002-pipeline-elaboration/`. Fix any violations.
 
 **Done when:** markdownlint exits clean on `spec.md`, `plan.md`, `data-model.md`, and `tasks.md`.
 
