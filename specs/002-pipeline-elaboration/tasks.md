@@ -57,10 +57,10 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 7. Effective error map construction
 
-- [ ] Create `pipeline/errors_block.go` with `buildErrorMap(handlerPattern *ast.RoutePattern, blocks []*ast.ErrorsBlock) (entries []ErrorMapEntry, errs []Error)`.
-- [ ] Reuse `findKept` and `sortBySpecificity` from `match.go` for the kept-set and ambiguity detection (emit `AmbiguousErrorsBlock` errors with the same shape as `AmbiguousGroup`).
-- [ ] Layer kept blocks least-specific to most-specific: for each `TypeName`, the most-specific block's entry wins. Build the result slice by iterating kept blocks and entries in their natural order; track which `TypeName`s have been emitted to skip duplicates from less-specific blocks.
-- [ ] Add unit tests in `pipeline/errors_block_test.go` covering: no matching blocks (empty map), single matching block, two blocks in containment (more-specific wins per type, less-specific fills gaps), `default` entry handling, two blocks overlapping without containment (ambiguity error + clean chain falls back to remaining blocks), and source-span preservation per entry.
+- [x] Create `pipeline/errors_block.go` with `buildErrorMap(handler *ast.HandlerBlock, blocks []*ast.ErrorsBlock) (entries []ErrorMapEntry, errs []Error)`. (Takes the full handler block so the ambiguity error can carry the handler span as its primary location.)
+- [x] Reuse `findKept` and `sortBySpecificity` from `match.go` for the kept-set and ambiguity detection (emit `AmbiguousErrorsBlock` errors with the same shape as `AmbiguousGroup`).
+- [x] Layer kept blocks most-specific to least-specific (walking kept in reverse): for each `TypeName`, the first occurrence wins. Less-specific blocks fill in `TypeName`s not yet seen.
+- [x] Add unit tests in `pipeline/errors_block_test.go` covering: no matching blocks (empty map), single matching block, two blocks in containment (more-specific wins per type, less-specific fills gaps), `default` entry handling, two blocks overlapping without containment (ambiguity error + clean chain falls back to remaining blocks), and source-span preservation per entry.
 
 **Done when:** every acceptance criterion in the *Errors Block Selection* and *Ambiguous Errors Block Membership* sections has a passing unit test.
 
