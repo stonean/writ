@@ -99,8 +99,8 @@ GET /admin/dashboard ->
 	}
 	if resolved == nil {
 		t.Fatal("Elaborate returned nil")
+		return
 	}
-	_ = resolved
 	if len(resolved.Handlers) != 2 {
 		t.Fatalf("handlers = %d, want 2", len(resolved.Handlers))
 	}
