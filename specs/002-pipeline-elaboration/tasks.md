@@ -12,10 +12,10 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 2. Resolved data model and Stage interface
 
-- [ ] Create `pipeline/resolved.go` with `Resolved`, `Handler`, `OptOut`, `ErrorMapEntry`, `StageKind` (with `CanonicalPosition`, `IsObservational`, `IsSingleInstance`, `IsMultiInstance`, `IsTerminal`, `String` methods), and `SourceLevel` (with `String`).
-- [ ] Create `pipeline/stage.go` with the `Stage` interface and the 12 concrete stage types (`LogStage`, `MeasureStage`, `SessionStage`, `CSRFStage`, `LimitStage`, `ApproveStage`, `ResolveStage`, `CommitStage`, `EmitStage`, `LayoutStage`, `FormatStage`, `RedirectStage`), each with its accessor methods per the data model.
-- [ ] Implement uniform constructors `newLogStage`, `newMeasureStage`, etc., taking `(src *ast.XxxStmt, level SourceLevel, group *ast.GroupBlock)`.
-- [ ] Add unit tests asserting each `StageKind` predicate (`IsObservational`, `IsSingleInstance`, `IsMultiInstance`, `IsTerminal`) returns the correct value for every kind, and that `CanonicalPosition` returns the documented values.
+- [x] Create `pipeline/resolved.go` with `Resolved`, `Handler`, `OptOut`, `ErrorMapEntry`, `StageKind` (with `CanonicalPosition`, `IsObservational`, `IsSingleInstance`, `IsMultiInstance`, `IsTerminal`, `String` methods), and `SourceLevel` (with `String`).
+- [x] Create `pipeline/stage.go` with the `Stage` interface and the 12 concrete stage types (`LogStage`, `MeasureStage`, `SessionStage`, `CSRFStage`, `LimitStage`, `ApproveStage`, `ResolveStage`, `CommitStage`, `EmitStage`, `LayoutStage`, `FormatStage`, `RedirectStage`), each with its accessor methods per the data model.
+- [x] Implement uniform constructors `newLogStage`, `newMeasureStage`, etc., taking `(src *ast.XxxStmt, level SourceLevel, group *ast.GroupBlock)`.
+- [x] Add unit tests asserting each `StageKind` predicate (`IsObservational`, `IsSingleInstance`, `IsMultiInstance`, `IsTerminal`) returns the correct value for every kind, and that `CanonicalPosition` returns the documented values.
 
 **Done when:** every type and method in the data model is declared, the package builds, and the predicate unit tests pass.
 
