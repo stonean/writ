@@ -67,26 +67,28 @@ Note: rate-vs-route disambiguation moved from previous-token tracking (task 4 no
 
 ## 7. Implement error recovery
 
-- [ ] Add a statement-level sync helper that consumes tokens to the next `NEWLINE` and continues with the next line.
-- [ ] Add a top-level sync helper that consumes tokens to the next column-0 keyword (`system`, `group`, `errors`, `include`, or `[A-Z][A-Z0-9-]*`).
-- [ ] Wire each `parseXxx` site that can fail to its appropriate sync helper.
-- [ ] Write a test where a single file contains three distinct syntax errors and assert that the parser reports all three in one pass.
-- [ ] Write a test where a malformed block header is followed by a valid block and assert that the valid block still parses.
+- [x] Add a statement-level sync helper that consumes tokens to the next `NEWLINE` and continues with the next line.
+- [x] Add a top-level sync helper that consumes tokens to the next column-0 keyword (`system`, `group`, `errors`, `include`, or `[A-Z][A-Z0-9-]*`).
+- [x] Wire each `parseXxx` site that can fail to its appropriate sync helper.
+- [x] Write a test where a single file contains three distinct syntax errors and assert that the parser reports all three in one pass.
+- [x] Write a test where a malformed block header is followed by a valid block and assert that the valid block still parses.
 
 **Done when:** the multi-error test passes and the recovery test confirms a partial AST contains the well-formed block.
 
 ## 8. Implement include resolution
 
-- [ ] Replace the `parseIncludeStmt` stub with real resolution: open the file via the configured `fs.FS`, lex/parse it, and inline its top-level constructs at the include point.
-- [ ] Resolve include paths relative to the *current* file's directory.
-- [ ] Maintain a cycle stack of open absolute paths; on cycle, emit a structured error naming the cycle and skip the include.
-- [ ] Reject include paths whose extension is not `.writ` (case-sensitive) with a parse error at the path span.
-- [ ] On a missing include file, emit a parse error at the `include` statement's span.
-- [ ] On a `system` block declared inside an included file, emit an error at the `system` block's span.
-- [ ] Ensure `Program.Sources` accumulates every file that contributed, in include-discovery order, with the root file at index 0.
-- [ ] Ensure all spans on inlined nodes still reference their originating `*Source`, not the root file.
+- [x] Replace the `parseIncludeStmt` stub with real resolution: open the file via the configured `fs.FS`, lex/parse it, and inline its top-level constructs at the include point.
+- [x] Resolve include paths relative to the *current* file's directory.
+- [x] Maintain a cycle stack of open absolute paths; on cycle, emit a structured error naming the cycle and skip the include.
+- [x] Reject include paths whose extension is not `.writ` (case-sensitive) with a parse error at the path span.
+- [x] On a missing include file, emit a parse error at the `include` statement's span.
+- [x] On a `system` block declared inside an included file, emit an error at the `system` block's span.
+- [x] Ensure `Program.Sources` accumulates every file that contributed, in include-discovery order, with the root file at index 0.
+- [x] Ensure all spans on inlined nodes still reference their originating `*Source`, not the root file.
 
 **Done when:** the include acceptance tests pass: equivalent-to-single-file flattening, cycle reporting, missing-file reporting, system-in-include reporting, and `.writ`-extension enforcement.
+
+Note: a `parseSession` struct now holds the cfg, cycle stack, source registry, and merged error list across recursive parser instances. `parseIncludeStmt` reads the path as a sequence of adjacent `IDENT/INT/SLASH/MINUS` tokens (not a single token) so subdirectory paths like `subdir/foo.writ` work. Cycle detection compares fsys-relative cleaned paths. Sources accumulate in include-discovery order with the root at index 0; all spans continue to reference their originating `*Source` because the sub-parser lexes against the included file directly.
 
 ## 9. Acceptance criterion test pass
 

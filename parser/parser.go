@@ -1,10 +1,13 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,7 +48,8 @@ func Parse(rootPath string, opts ...Option) (*ast.Program, []Error) {
 		cfg.root = filepath.Dir(rootPath)
 	}
 
-	bytes, err := fs.ReadFile(cfg.fsys, filepath.Base(rootPath))
+	relPath := filepath.Base(rootPath)
+	bytes, err := fs.ReadFile(cfg.fsys, relPath)
 	if err != nil {
 		empty := &ast.Source{Path: rootPath, Bytes: nil}
 		zero := ast.Position{Source: empty}
@@ -61,27 +65,57 @@ func Parse(rootPath string, opts ...Option) (*ast.Program, []Error) {
 	}
 
 	src := &ast.Source{Path: rootPath, Bytes: bytes}
-	return parseSource(src, cfg)
+	session := &parseSession{
+		cfg:        cfg,
+		cycleStack: []string{relPath},
+		sources:    []*ast.Source{src},
+	}
+	p := newParser(src, relPath, session)
+	program := p.parseProgram()
+	program.Sources = session.sources
+	return program, session.errors
 }
 
 // ParseString parses an in-memory source string. virtualPath is the
 // path the source will appear under in error messages and AST spans.
+// Includes from a ParseString'd source are not supported (no
+// filesystem is configured) and are reported as errors.
 func ParseString(virtualPath, source string) (*ast.Program, []Error) {
 	src := &ast.Source{Path: virtualPath, Bytes: []byte(source)}
-	return parseSource(src, &config{})
+	session := &parseSession{
+		cfg:     &config{},
+		sources: []*ast.Source{src},
+	}
+	p := newParser(src, "", session)
+	program := p.parseProgram()
+	program.Sources = session.sources
+	return program, session.errors
 }
 
-func parseSource(src *ast.Source, cfg *config) (*ast.Program, []Error) {
+// parseSession holds state shared by every parser instance in one
+// Parse / ParseString call: the configured filesystem, the include
+// cycle stack, the cumulative Sources registry, and the merged error
+// list. Each included file gets its own *parser, but they all
+// contribute to the same session.
+type parseSession struct {
+	cfg        *config
+	cycleStack []string // fsys-relative paths currently on the include stack
+	sources    []*ast.Source
+	errors     []Error
+}
+
+// newParser creates a parser for src. relPath is src's path within
+// session.cfg.fsys (used to resolve includes); it is empty for
+// ParseString'd sources.
+func newParser(src *ast.Source, relPath string, session *parseSession) *parser {
 	tokens, lexErrs := tokenize(src)
-	p := &parser{
-		src:    src,
-		tokens: tokens,
-		errs:   lexErrs,
-		cfg:    cfg,
+	session.errors = append(session.errors, lexErrs...)
+	return &parser{
+		src:     src,
+		relPath: relPath,
+		tokens:  tokens,
+		session: session,
 	}
-	program := p.parseProgram()
-	program.Sources = []*ast.Source{src}
-	return program, p.errs
 }
 
 func tokenize(src *ast.Source) ([]Token, []Error) {
@@ -97,15 +131,17 @@ func tokenize(src *ast.Source) ([]Token, []Error) {
 	return toks, l.Errors()
 }
 
-// parser holds the streaming parse state for a single source. The
-// token stream is fully materialized up front so the parser can do
-// constant-cost peekAt(k).
+// parser holds the parse state for a single source. The token
+// stream is fully materialized up front so peekAt(k) is O(1).
+// Errors, the include cycle stack, and the source registry live on
+// the shared *parseSession so include resolution can recurse without
+// losing state.
 type parser struct {
-	src    *ast.Source
-	tokens []Token
-	pos    int
-	errs   []Error
-	cfg    *config
+	src     *ast.Source
+	relPath string // src's path within session.cfg.fsys (empty for ParseString)
+	tokens  []Token
+	pos     int
+	session *parseSession
 }
 
 func (p *parser) atEOF() bool { return p.peek().Kind == TokenEOF }
@@ -132,7 +168,7 @@ func (p *parser) advance() Token {
 }
 
 func (p *parser) errAt(span ast.Span, format string, args ...any) {
-	p.errs = append(p.errs, Error{
+	p.session.errors = append(p.session.errors, Error{
 		File:    p.src.Path,
 		Line:    span.Start.Line,
 		Column:  span.Start.Column,
@@ -167,14 +203,23 @@ func describeToken(tok Token) string {
 }
 
 // syncToNewline consumes tokens up to (but not including) the next
-// newline or EOF. Used after a malformed statement so the next
-// statement on the next line still parses cleanly.
+// newline or EOF.
 func (p *parser) syncToNewline() {
 	for {
 		k := p.peek().Kind
 		if k == TokenNewline || k == TokenEOF {
 			return
 		}
+		p.advance()
+	}
+}
+
+// abandonStatement is the statement-level recovery helper: consume
+// the remainder of the current line and the trailing newline so the
+// next call to parseStatement sees a fresh line.
+func (p *parser) abandonStatement() {
+	p.syncToNewline()
+	if p.peek().Kind == TokenNewline {
 		p.advance()
 	}
 }
@@ -222,10 +267,7 @@ func (p *parser) expectNewline() bool {
 		return true
 	default:
 		p.errCurrent("expected end of line, got %s", describeToken(p.peek()))
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return false
 	}
 }
@@ -289,7 +331,7 @@ func (p *parser) parseProgram() *ast.Program {
 			}
 		case cur.Lexeme == "include":
 			tok := p.advance()
-			p.parseIncludeStmt(tok)
+			p.parseIncludeStmt(tok, program)
 		case isMethodCandidate(cur):
 			tok := p.advance()
 			if blk := p.parseHandlerBlock(tok); blk != nil {
@@ -389,18 +431,12 @@ func (p *parser) parseErrorsBlock(errorsTok Token) *ast.ErrorsBlock {
 func (p *parser) parseErrorsEntry() *ast.ErrorsEntry {
 	typeTok, ok := p.expect(TokenIdent, "error type name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	fmtTok, ok := p.expect(TokenIdent, "formatter name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	p.expectNewline()
@@ -502,10 +538,7 @@ func (p *parser) parseStatement() ast.Stmt {
 	leading := p.peek()
 	if leading.Kind != TokenIdent {
 		p.errCurrent("expected statement keyword, got %s", describeToken(leading))
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 
@@ -536,10 +569,7 @@ func (p *parser) parseStatement() ast.Stmt {
 		return p.parseLayoutStmt(p.advance())
 	default:
 		p.errAt(leading.Span, "unknown statement keyword %q", leading.Lexeme)
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 }
@@ -597,10 +627,7 @@ func (p *parser) parseSessionStmt(sessionTok Token) ast.Stmt {
 	}
 	storageTok, ok := p.expect(TokenIdent, "session storage name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	p.expectNewline()
@@ -618,10 +645,7 @@ func (p *parser) parseCSRFStmt(csrfTok Token) ast.Stmt {
 	}
 	modeTok, ok := p.expect(TokenIdent, "csrf mode")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	p.expectNewline()
@@ -668,17 +692,11 @@ func (p *parser) parseApproveStmt(approveTok Token) ast.Stmt {
 func (p *parser) parseResolveStmt(resolveTok Token) ast.Stmt {
 	nameTok, ok := p.expect(TokenIdent, "resolve name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	if _, ok := p.expect(TokenEquals, "'='"); !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	call := p.parseCall()
@@ -721,10 +739,7 @@ func (p *parser) parseCommitStmt(commitTok Token) ast.Stmt {
 func (p *parser) parseEmitStmt(emitTok Token) ast.Stmt {
 	eventTok, ok := p.expect(TokenIdent, "event name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	endPos := eventTok.Span.End
@@ -759,10 +774,7 @@ func (p *parser) parseFormatStmt(formatTok Token) ast.Stmt {
 	}
 	tmplTok, ok := p.expect(TokenIdent, "format template name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 
@@ -844,10 +856,7 @@ func (p *parser) parseLayoutStmt(layoutTok Token) ast.Stmt {
 	}
 	nameTok, ok := p.expect(TokenIdent, "layout name")
 	if !ok {
-		p.syncToNewline()
-		if p.peek().Kind == TokenNewline {
-			p.advance()
-		}
+		p.abandonStatement()
 		return nil
 	}
 	p.expectNewline()
@@ -858,20 +867,87 @@ func (p *parser) parseLayoutStmt(layoutTok Token) ast.Stmt {
 	return stmt
 }
 
-// parseIncludeStmt is the task-6 stub. The full implementation is
-// task 8; here we record an error and skip the rest of the line so
-// the remainder of the file still parses.
-func (p *parser) parseIncludeStmt(includeTok Token) {
-	span := includeTok.Span
-	if p.peek().Kind != TokenNewline && p.peek().Kind != TokenEOF {
-		span.End = p.peek().Span.End
-		for p.peek().Kind != TokenNewline && p.peek().Kind != TokenEOF {
-			span.End = p.peek().Span.End
-			p.advance()
+// parseIncludeStmt resolves an `include <path>` directive: it reads
+// the path tokens (one or more adjacent IDENT/INT/SLASH/MINUS pieces
+// — paths may contain subdirectories), validates the .writ
+// extension, resolves the path against the current source's
+// directory within session.cfg.fsys, detects cycles, opens and
+// recursively parses the included file, then inlines the included
+// program's blocks into program. A `system` block in an included
+// file is reported as an error and not merged.
+func (p *parser) parseIncludeStmt(includeTok Token, program *ast.Program) {
+	if p.peek().Kind == TokenNewline || p.peek().Kind == TokenEOF {
+		p.errCurrent("include requires a path")
+		p.expectNewline()
+		return
+	}
+
+	pathStartTok := p.peek()
+	pathEndPos := pathStartTok.Span.End
+	for {
+		k := p.peek().Kind
+		if k == TokenNewline || k == TokenEOF {
+			break
 		}
+		if k != TokenIdent && k != TokenInt && k != TokenSlash && k != TokenMinus {
+			p.errAt(p.peek().Span, "unexpected %s in include path", describeToken(p.peek()))
+			break
+		}
+		pathEndPos = p.peek().Span.End
+		p.advance()
 	}
 	p.expectNewline()
-	p.errAt(span, "include not yet implemented")
+
+	pathSpan := ast.Span{Start: pathStartTok.Span.Start, End: pathEndPos}
+	includePath := string(p.src.Bytes[pathSpan.Start.Offset:pathSpan.End.Offset])
+	if !strings.HasSuffix(includePath, ".writ") {
+		p.errAt(pathSpan, `include path %q must end in ".writ"`, includePath)
+		return
+	}
+
+	if p.session.cfg.fsys == nil {
+		p.errAt(includeTok.Span, "include not supported: no filesystem configured")
+		return
+	}
+
+	currentDir := path.Dir(p.relPath)
+	if p.relPath == "" || currentDir == "." {
+		currentDir = ""
+	}
+	resolved := path.Clean(path.Join(currentDir, includePath))
+
+	if slices.Contains(p.session.cycleStack, resolved) {
+		chain := append([]string{}, p.session.cycleStack...)
+		chain = append(chain, resolved)
+		p.errAt(pathSpan, "include cycle: %s", strings.Join(chain, " -> "))
+		return
+	}
+
+	bytes, err := fs.ReadFile(p.session.cfg.fsys, resolved)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			p.errAt(includeTok.Span, "include %q: file not found (resolved to %s)", includePath, resolved)
+		} else {
+			p.errAt(includeTok.Span, "cannot read include %q: %v", includePath, err)
+		}
+		return
+	}
+
+	src := &ast.Source{Path: resolved, Bytes: bytes}
+	p.session.sources = append(p.session.sources, src)
+	p.session.cycleStack = append(p.session.cycleStack, resolved)
+
+	sub := newParser(src, resolved, p.session)
+	subProgram := sub.parseProgram()
+
+	p.session.cycleStack = p.session.cycleStack[:len(p.session.cycleStack)-1]
+
+	if subProgram.System != nil {
+		sub.errAt(subProgram.System.Span(), "system block is not allowed in an included file")
+	}
+	program.Groups = append(program.Groups, subProgram.Groups...)
+	program.Errors = append(program.Errors, subProgram.Errors...)
+	program.Handlers = append(program.Handlers, subProgram.Handlers...)
 }
 
 // parseRoutePattern is `/` followed by zero or more slash-separated

@@ -424,12 +424,13 @@ func TestParseEmptySegmentIsError(t *testing.T) {
 	}
 }
 
-func TestParseIncludeStubReportsError(t *testing.T) {
+func TestParseStringIncludeNotSupported(t *testing.T) {
+	// ParseString has no fsys; an include directive cannot resolve.
 	_, errs := parseStr(t, "include admin.writ\n")
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1: %v", len(errs), errs)
 	}
-	if !contains(errs[0].Message, "include not yet implemented") {
+	if !contains(errs[0].Message, "no filesystem configured") {
 		t.Fatalf("error message = %q", errs[0].Message)
 	}
 }
@@ -455,6 +456,51 @@ foo /bar ->
 	_, errs := parseStr(t, src)
 	if len(errs) < 2 {
 		t.Fatalf("expected multiple errors, got %d: %v", len(errs), errs)
+	}
+}
+
+// Task 7: a single file with three distinct syntax errors must
+// surface all three from a single pass.
+func TestParseRecoveryReportsThreeDistinctErrors(t *testing.T) {
+	src := `system ->
+  blarg :foo
+get /users ->
+  log :id
+GET /posts
+  log :id
+`
+	_, errs := parseStr(t, src)
+	if len(errs) < 3 {
+		t.Fatalf("expected at least 3 errors, got %d: %v", len(errs), errs)
+	}
+
+	// Each error should target a different line.
+	lines := make(map[int]bool)
+	for _, e := range errs {
+		lines[e.Line] = true
+	}
+	if len(lines) < 3 {
+		t.Fatalf("expected errors on at least 3 distinct lines, got %v", lines)
+	}
+}
+
+// Task 7: a malformed block header followed by a valid block must
+// still produce the valid block in the partial AST.
+func TestParseRecoveryWellFormedBlockSurvivesAfterBadHeader(t *testing.T) {
+	src := `system blah blah
+GET /users ->
+  log :id
+`
+	prog, errs := parseStr(t, src)
+	if len(errs) == 0 {
+		t.Fatalf("expected at least one error from malformed system header")
+	}
+	if len(prog.Handlers) != 1 {
+		t.Fatalf("expected the GET handler block to recover; got %d handlers, errs=%v",
+			len(prog.Handlers), errs)
+	}
+	if prog.Handlers[0].Method != "GET" {
+		t.Errorf("recovered handler method = %q, want GET", prog.Handlers[0].Method)
 	}
 }
 
