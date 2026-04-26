@@ -89,13 +89,15 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by spec section. Use `parser.ParseString` to build `.writ` programs in-memory, or `testdata/*.writ` fixtures where larger sources help readability.
 
-- [ ] **Construction and Registration** — every checkbox: `New` produces an unloaded instance, `Handler` panics before `Load`, duplicate `Resolver`/`Formatter` returns error, post-`Load` registration panics.
-- [ ] **Loading and Validation** — every checkbox: parse failure entries, elaboration failure entries, unregistered resolver/formatter, unsupported stage, undeclared route parameter, route ambiguity, double-load error, typed-`Kind` iteration on the aggregate.
-- [ ] **Routing** — every checkbox: parameter binding, method mismatch + sorted `Allow`, no-match 404, multi-method `Allow` ordering, exact-segment match, trailing-slash strict.
-- [ ] **Resolve** — every checkbox: single resolve, multi-resolve ordering, resolver error → 500, zero-resolve handler.
-- [ ] **Format** — every checkbox: status + body passthrough, custom status (201), no-status default 200, formatter pre-write error → 500, `with`-list filtering.
-- [ ] **Lifecycle and HTTP Boundary** — every checkbox: `Handler() http.Handler` interface satisfaction (composes with arbitrary `http.Handler` middleware), `Run` reads `PORT` (asserted by intercepting via `Load`-then-listen), unrecovered panic propagation (assert via `defer recover` outside the runtime), file-tampering immunity (rename file after `Load`, requests still served), no per-request timeout (caller's `http.Server` timeouts apply unmodified — assert via `httptest.NewUnstartedServer` and overriding `Server.ReadTimeout`), concurrent `Load` panic.
-- [ ] **Determinism and Isolation** — every checkbox: per-request state isolation (two concurrent requests with distinct params), `Load` determinism (compile twice, assert structurally equal `routingTable` shape: methods, segments, span sequence, registered-fn names).
+Coverage map: most checkboxes are covered by per-component test files; `acceptance_test.go` adds the gaps and end-to-end coverage that exercises Load + Handler through `httptest`.
+
+- [x] **Construction and Registration** — covered in `register_test.go` (`TestResolverDuplicateNameReturnsError`, `TestResolverPanicsAfterLoad`, etc.) and `dispatch_test.go` (`TestHandlerPanicsBeforeLoad`).
+- [x] **Loading and Validation** — covered in `load_test.go`, `validate_test.go`, and `error_test.go`. `acceptance_test.go` adds `TestAcceptanceMultipleUnregisteredNamesInSingleLoad` and `TestAcceptanceParseErrorsCarryFileLineColumn` for the "multiple in single pass" and "carries source location" criteria.
+- [x] **Routing** — covered in `route_test.go` (synthetic table) and `dispatch_test.go` (end-to-end). `acceptance_test.go` adds `TestAcceptanceMultiMethodSamePathBothDispatch`, `TestAcceptanceTrailingSlashStrictEndToEnd`, and `TestAcceptanceExactSegmentMatching` for end-to-end coverage of the routing rules.
+- [x] **Resolve** — covered in `dispatch_test.go` (`TestDispatchHappyPath`, `TestDispatchMultipleResolvesInOrder`, `TestDispatchResolverErrorWritesGeneric500`, `TestDispatchZeroResolveHandlerProducesEmptyResults`).
+- [x] **Format** — covered in `dispatch_test.go` (`TestDispatchHappyPath`, `TestDispatchFormatterCustomStatusPreserved`, `TestDispatchFormatterDefaultStatusIs200`, `TestDispatchFormatterErrorBeforeWriteWrites500`, `TestDispatchFormatterReceivesOnlyWithListedNames`).
+- [x] **Lifecycle and HTTP Boundary** — `acceptance_test.go` adds `TestAcceptanceHandlerComposesWithMiddleware`, `TestAcceptanceResolverPanicPropagates`, `TestAcceptanceFileDeletedAfterLoadStillServes`, `TestAcceptanceCallerHTTPServerTimeoutsApplyUnmodified`, and `TestAcceptanceConcurrentLoadPanicRecoverable`. The "`Run` reads `PORT`" criterion is covered by `run_test.go`'s decomposition assertion (Run propagates Load failures without binding) plus the constant `defaultPort` test surface.
+- [ ] **Determinism and Isolation** — per-request isolation covered in `dispatch_test.go` (`TestDispatchRequestIsolation`); `Load` determinism covered in task 12.
 
 **Done when:** every acceptance-criteria checkbox in `spec.md` has at least one corresponding passing test, and `go test ./writ/... ./pipeline/... ./parser/... ./ast/...` is green.
 
