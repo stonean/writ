@@ -108,7 +108,7 @@ Cover every checkbox under "Acceptance Criteria" in `spec.md`. Group tests by sp
 
 ## 12. Status transition
 
-- [ ] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
-- [ ] Update `spec.md` status from `clarified` to `planned` (the plan command transitions to `planned`; the implement command later transitions to `in-progress` then `done`).
+- [x] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
+- [x] Update `spec.md` status from `clarified` to `planned` (the plan command transitions to `planned`; the implement command later transitions to `in-progress` then `done`).
 
 **Done when:** the user has confirmed the plan and the spec status reads `planned`.

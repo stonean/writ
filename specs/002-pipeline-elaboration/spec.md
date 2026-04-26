@@ -1,6 +1,6 @@
 # 002 — Pipeline Elaboration
 
-**Status:** in-progress
+**Status:** done
 **Dependencies:** 001-dsl-parser
 
 Pipeline elaboration is the second layer of meaning on top of the syntactic AST. It walks a parsed program and produces a *resolved structure*: for each handler, the effective pipeline with system-block defaults applied, group-level overrides applied, and handler-level overrides applied — with `none` opt-outs honored, the matching `errors` block chosen, and the source span of every effective stage preserved.
@@ -184,94 +184,94 @@ These spellings are illustrative. Plan phase resolves the exact package, type, a
 
 ### Single-Instance Override
 
-- [ ] When system declares `approve auth.X` and a handler does not declare `approve`, the handler's effective `approve` is `auth.X` and its span points at the system block's declaration.
-- [ ] When group declares `approve auth.Y` and a handler in that group does not declare `approve`, the handler's effective `approve` is `auth.Y` and its span points at the group's declaration.
-- [ ] When a handler declares `approve auth.Z`, the handler's effective `approve` is `auth.Z` regardless of system or group declarations, and its span points at the handler's declaration.
-- [ ] When a handler declares `approve none`, the handler has no effective `approve` stage, and the resolved entry records the explicit opt-out distinctly from "no `approve` declared at any level."
-- [ ] The same override semantics hold for every single-instance stage: `log`, `measure`, `session`, `csrf`, `limit`, `approve`, `layout`.
-- [ ] When a handler declares `layout none`, the resolved entry records an explicit opt-out distinct from "no layout declared at any level," so consumers can render without any layout wrapper instead of falling back to the runtime default.
+- [x] When system declares `approve auth.X` and a handler does not declare `approve`, the handler's effective `approve` is `auth.X` and its span points at the system block's declaration.
+- [x] When group declares `approve auth.Y` and a handler in that group does not declare `approve`, the handler's effective `approve` is `auth.Y` and its span points at the group's declaration.
+- [x] When a handler declares `approve auth.Z`, the handler's effective `approve` is `auth.Z` regardless of system or group declarations, and its span points at the handler's declaration.
+- [x] When a handler declares `approve none`, the handler has no effective `approve` stage, and the resolved entry records the explicit opt-out distinctly from "no `approve` declared at any level."
+- [x] The same override semantics hold for every single-instance stage: `log`, `measure`, `session`, `csrf`, `limit`, `approve`, `layout`.
+- [x] When a handler declares `layout none`, the resolved entry records an explicit opt-out distinct from "no layout declared at any level," so consumers can render without any layout wrapper instead of falling back to the runtime default.
 
 ### Multi-Instance Composition
 
-- [ ] When system declares `resolve a = X.foo()` and a handler declares `resolve b = X.bar()`, the handler's effective resolve list is `[a, b]` in that order.
-- [ ] When system, a matching group, and a handler each declare a `resolve` step, the handler's effective resolve list is `[system_step, group_step, handler_step]` (system first, group middle, handler last).
-- [ ] When two matching groups both declare `resolve` steps and one group's pattern is contained within the other's, the more-specific group's steps appear after the less-specific group's steps.
-- [ ] Within a single level, multiple declarations of the same multi-instance stage appear in the resolved entry in source declaration order.
-- [ ] When a handler declares `resolve none`, all inherited `resolve` steps from system and matching groups are cleared, and the handler's effective resolve list contains only the handler's own `resolve` steps (if any).
-- [ ] The same composition rules apply to `commit` and `emit`.
-- [ ] The same composition rules apply to observational stages (`log` and `measure`), with one exception: source order across the entire block determines their position in the effective stage list, not their position relative to canonical pipeline ordering.
+- [x] When system declares `resolve a = X.foo()` and a handler declares `resolve b = X.bar()`, the handler's effective resolve list is `[a, b]` in that order.
+- [x] When system, a matching group, and a handler each declare a `resolve` step, the handler's effective resolve list is `[system_step, group_step, handler_step]` (system first, group middle, handler last).
+- [x] When two matching groups both declare `resolve` steps and one group's pattern is contained within the other's, the more-specific group's steps appear after the less-specific group's steps.
+- [x] Within a single level, multiple declarations of the same multi-instance stage appear in the resolved entry in source declaration order.
+- [x] When a handler declares `resolve none`, all inherited `resolve` steps from system and matching groups are cleared, and the handler's effective resolve list contains only the handler's own `resolve` steps (if any).
+- [x] The same composition rules apply to `commit` and `emit`.
+- [x] The same composition rules apply to observational stages (`log` and `measure`), with one exception: source order across the entire block determines their position in the effective stage list, not their position relative to canonical pipeline ordering.
 
 ### Group Membership
 
-- [ ] A handler at route `/admin/users/:id` is a member of group `/admin/*` and inherits its overrides.
-- [ ] A handler at route `/users/:id` is not a member of group `/admin/*` and inherits nothing from it.
-- [ ] A handler matched by no group inherits only from the system block.
-- [ ] A handler at route `/users/:id/posts` is a member of group `/users/:id/*`, where `:id` matches any value at that segment position.
+- [x] A handler at route `/admin/users/:id` is a member of group `/admin/*` and inherits its overrides.
+- [x] A handler at route `/users/:id` is not a member of group `/admin/*` and inherits nothing from it.
+- [x] A handler matched by no group inherits only from the system block.
+- [x] A handler at route `/users/:id/posts` is a member of group `/users/:id/*`, where `:id` matches any value at that segment position.
 
 ### Nested Group Layering
 
-- [ ] When two groups match a handler and one is strictly contained in the other (e.g., `/admin/*` contains `/admin/users/*`), the handler inherits from both, with the more specific group's declarations overriding the less specific group's per single-instance stage.
-- [ ] When the more-specific matching group does not declare a stage that the less-specific matching group declared, the less-specific group's declaration is preserved in the effective pipeline.
-- [ ] Multi-instance steps from the less-specific matching group precede multi-instance steps from the more-specific matching group in the handler's effective list, before handler-level steps.
+- [x] When two groups match a handler and one is strictly contained in the other (e.g., `/admin/*` contains `/admin/users/*`), the handler inherits from both, with the more specific group's declarations overriding the less specific group's per single-instance stage.
+- [x] When the more-specific matching group does not declare a stage that the less-specific matching group declared, the less-specific group's declaration is preserved in the effective pipeline.
+- [x] Multi-instance steps from the less-specific matching group precede multi-instance steps from the more-specific matching group in the handler's effective list, before handler-level steps.
 
 ### Errors Block Selection
 
-- [ ] When a handler at route `/admin/users/:id` matches both `errors /admin/* ->` and `errors /* ->`, its effective error map layers the two: entries from `/admin/*` take precedence; `/*` entries fill in any Go error type names that `/admin/*` did not declare.
-- [ ] When the same Go error type name appears in two matching `errors` blocks, the more-specific block's entry wins in the effective error map.
-- [ ] When a handler is matched by no `errors` block, its effective error map is empty.
-- [ ] Effective error map entries are reachable from the resolved handler entry without re-walking the AST.
-- [ ] Each effective error map entry carries the source span of the originating `errors` block entry.
+- [x] When a handler at route `/admin/users/:id` matches both `errors /admin/* ->` and `errors /* ->`, its effective error map layers the two: entries from `/admin/*` take precedence; `/*` entries fill in any Go error type names that `/admin/*` did not declare.
+- [x] When the same Go error type name appears in two matching `errors` blocks, the more-specific block's entry wins in the effective error map.
+- [x] When a handler is matched by no `errors` block, its effective error map is empty.
+- [x] Effective error map entries are reachable from the resolved handler entry without re-walking the AST.
+- [x] Each effective error map entry carries the source span of the originating `errors` block entry.
 
 ### Ambiguous Errors Block Membership
 
-- [ ] When two `errors` blocks whose patterns overlap without containment both match a handler, elaboration emits an *ambiguous errors block membership* error referencing every conflicting block's span and the affected handler.
-- [ ] After the ambiguity error, the handler's effective error map is built from the remaining matching blocks that form a clean containment chain; the conflicting blocks are skipped.
-- [ ] When no clean containment chain remains after skipping conflicting blocks, the effective error map is empty.
+- [x] When two `errors` blocks whose patterns overlap without containment both match a handler, elaboration emits an *ambiguous errors block membership* error referencing every conflicting block's span and the affected handler.
+- [x] After the ambiguity error, the handler's effective error map is built from the remaining matching blocks that form a clean containment chain; the conflicting blocks are skipped.
+- [x] When no clean containment chain remains after skipping conflicting blocks, the effective error map is empty.
 
 ### Canonical Stage Order
 
-- [ ] A handler block where semantic stages appear in canonical pipeline order produces no stage-order violation.
-- [ ] A handler block where `approve` appears before `csrf` (or any non-canonical sequence among semantic stages) produces a stage-order violation error pointing at the offending statement.
-- [ ] A system or group block with semantic stages in non-canonical order produces a stage-order violation error pointing at the offending statement.
-- [ ] A handler block with `log` or `measure` interleaved between semantic stages (e.g., `log` after `resolve`, `measure` after `commit`) produces no stage-order violation; observational stages are exempt from canonical order.
-- [ ] Each stage-order violation error carries a file path, line number, column number, and a human-readable message naming the canonical position the offending stage kind belongs in.
-- [ ] After a stage-order violation, the resolved entry's effective stage list still contains the offending statement, placed in its canonical position so consumers can render the resolved pipeline.
+- [x] A handler block where semantic stages appear in canonical pipeline order produces no stage-order violation.
+- [x] A handler block where `approve` appears before `csrf` (or any non-canonical sequence among semantic stages) produces a stage-order violation error pointing at the offending statement.
+- [x] A system or group block with semantic stages in non-canonical order produces a stage-order violation error pointing at the offending statement.
+- [x] A handler block with `log` or `measure` interleaved between semantic stages (e.g., `log` after `resolve`, `measure` after `commit`) produces no stage-order violation; observational stages are exempt from canonical order.
+- [x] Each stage-order violation error carries a file path, line number, column number, and a human-readable message naming the canonical position the offending stage kind belongs in.
+- [x] After a stage-order violation, the resolved entry's effective stage list still contains the offending statement, placed in its canonical position so consumers can render the resolved pipeline.
 
 ### Source Provenance
 
-- [ ] Every effective stage entry carries a span. The span references the originating file and line of the declaration that won, not the handler's own location when the stage was inherited.
-- [ ] After include flattening, spans still reference the original file each declaration was written in (not the post-flatten root file position).
+- [x] Every effective stage entry carries a span. The span references the originating file and line of the declaration that won, not the handler's own location when the stage was inherited.
+- [x] After include flattening, spans still reference the original file each declaration was written in (not the post-flatten root file position).
 
 ### Determinism
 
-- [ ] Resolving the same parsed program twice produces structurally equal resolved values: the same handler order, the same canonical stage order within each handler, and equal spans.
-- [ ] Pipeline elaboration performs no I/O (no file reads, no network, no environment access, no logging).
+- [x] Resolving the same parsed program twice produces structurally equal resolved values: the same handler order, the same canonical stage order within each handler, and equal spans.
+- [x] Pipeline elaboration performs no I/O (no file reads, no network, no environment access, no logging).
 
 ### Empty / Non-Existent Stages
 
-- [ ] A handler whose effective pipeline declares no `approve` at any level has no `approve` entry in the resolved value. This is distinct from a handler whose effective pipeline ends with `approve none`.
-- [ ] A program with a `system` block but no handlers produces a resolved value with zero handler entries (not an error).
-- [ ] A parser-error AST containing both well-formed and partial handler nodes produces a resolved value with entries for every well-formed handler; partial handler nodes are skipped silently and do not generate additional elaboration errors.
-- [ ] A parser-error AST with a partial `system` block is treated as if no system block exists; handlers inherit only from any well-formed matching groups.
+- [x] A handler whose effective pipeline declares no `approve` at any level has no `approve` entry in the resolved value. This is distinct from a handler whose effective pipeline ends with `approve none`.
+- [x] A program with a `system` block but no handlers produces a resolved value with zero handler entries (not an error).
+- [x] A parser-error AST containing both well-formed and partial handler nodes produces a resolved value with entries for every well-formed handler; partial handler nodes are skipped silently and do not generate additional elaboration errors.
+- [x] A parser-error AST with a partial `system` block is treated as if no system block exists; handlers inherit only from any well-formed matching groups.
 
 ### Stage-Placement Errors
 
-- [ ] A `format` declaration in a `system` block produces an elaboration error pointing at the `format` line's span. The resolved value still contains entries for every handler that elaborated cleanly.
-- [ ] A `format` declaration in a `group` block produces an elaboration error pointing at the `format` line's span.
-- [ ] A `redirect` declaration in a `system` or `group` block produces an elaboration error pointing at the `redirect` line's span.
-- [ ] A `format none` declaration at any level (system, group, or handler) produces an elaboration error.
-- [ ] A `redirect none` declaration at any level produces an elaboration error.
-- [ ] Every elaboration error carries a file path, line number, column number, and a human-readable message.
-- [ ] Pipeline elaboration always returns a non-nil resolved value; on errors, the resolved value contains every handler entry that elaborated cleanly, and the returned error list is the authoritative success indicator.
-- [ ] Elaboration reports multiple stage-placement violations in a single pass — it does not abort on the first error.
+- [x] A `format` declaration in a `system` block produces an elaboration error pointing at the `format` line's span. The resolved value still contains entries for every handler that elaborated cleanly.
+- [x] A `format` declaration in a `group` block produces an elaboration error pointing at the `format` line's span.
+- [x] A `redirect` declaration in a `system` or `group` block produces an elaboration error pointing at the `redirect` line's span.
+- [x] A `format none` declaration at any level (system, group, or handler) produces an elaboration error.
+- [x] A `redirect none` declaration at any level produces an elaboration error.
+- [x] Every elaboration error carries a file path, line number, column number, and a human-readable message.
+- [x] Pipeline elaboration always returns a non-nil resolved value; on errors, the resolved value contains every handler entry that elaborated cleanly, and the returned error list is the authoritative success indicator.
+- [x] Elaboration reports multiple stage-placement violations in a single pass — it does not abort on the first error.
 
 ### Ambiguous Group Membership
 
-- [ ] When two groups whose patterns overlap without containment both match a handler (e.g., `group /admin/*` and `group /:tenant/users/*` both matching `GET /admin/users/:id`), elaboration emits an *ambiguous group membership* error.
-- [ ] The error references the spans of every conflicting group and the affected handler, so tooling can point at all relevant locations.
-- [ ] The handler's resolved entry inherits only from the system block; every conflicting group is skipped.
-- [ ] When three or more matching groups form a containment chain, elaboration does not emit an ambiguity error — the layering rule applies normally.
-- [ ] When a containment chain exists alongside an unrelated overlapping group, only the unrelated group is reported as ambiguous; the chain layers normally for handlers it covers.
+- [x] When two groups whose patterns overlap without containment both match a handler (e.g., `group /admin/*` and `group /:tenant/users/*` both matching `GET /admin/users/:id`), elaboration emits an *ambiguous group membership* error.
+- [x] The error references the spans of every conflicting group and the affected handler, so tooling can point at all relevant locations.
+- [x] The handler's resolved entry inherits only from the system block; every conflicting group is skipped.
+- [x] When three or more matching groups form a containment chain, elaboration does not emit an ambiguity error — the layering rule applies normally.
+- [x] When a containment chain exists alongside an unrelated overlapping group, only the unrelated group is reported as ambiguous; the chain layers normally for handlers it covers.
 
 ## Open Questions
 
