@@ -1,6 +1,6 @@
 # 003 — Runtime Skeleton + HTTP Dispatch
 
-**Status:** in-progress
+**Status:** done
 **Dependencies:** 001-dsl-parser, 002-pipeline-elaboration
 
 The runtime skeleton is the first end-to-end execution path through Writ: parse a `.writ` file, elaborate the pipeline, register Go resolvers and formatters, bind an HTTP listener, dispatch incoming requests to the right handler, run the resolve and format stages, and write the response. It is the smallest amount of code that proves the framework actually serves a request.
@@ -157,60 +157,60 @@ The runtime is a `net/http`-compatible handler. This means:
 
 ### Construction and Registration
 
-- [ ] A new runtime instance is created with no registrations and no loaded `.writ` file. Calling `Handler()` before loading is a runtime panic with a message naming the missing load step.
-- [ ] Registering a resolver under a name that has already been registered is an error returned from the registration call.
-- [ ] Registering a formatter under a name that has already been registered is an error returned from the registration call.
-- [ ] Registering a resolver or formatter after `Load()` panics with a clear message naming the registration call.
+- [x] A new runtime instance is created with no registrations and no loaded `.writ` file. Calling `Handler()` before loading is a runtime panic with a message naming the missing load step.
+- [x] Registering a resolver under a name that has already been registered is an error returned from the registration call.
+- [x] Registering a formatter under a name that has already been registered is an error returned from the registration call.
+- [x] Registering a resolver or formatter after `Load()` panics with a clear message naming the registration call.
 
 ### Loading and Validation
 
-- [ ] Loading a `.writ` file with parse errors returns a single error whose detail lists every parser error in source order; the runtime is left unloaded.
-- [ ] Loading a `.writ` file that elaborates with errors (per spec 002) returns a single error whose detail lists every elaboration error in source order; the runtime is left unloaded.
-- [ ] Loading a `.writ` file that references an unregistered resolver name fails with an error naming the resolver and the source span of the referencing handler. Multiple unregistered references are all reported in a single load call.
-- [ ] Loading a `.writ` file that references an unregistered formatter name fails with an error naming the formatter and the source span of the referencing handler.
-- [ ] Loading a `.writ` file with a handler whose effective pipeline contains an out-of-scope stage (`session`, `csrf`, `limit`, `approve`, `commit`, `emit`, `layout`, `redirect`, `log`, `measure`) fails with an error naming the stage and its source span.
-- [ ] Loading a `.writ` file where a resolver argument references an undeclared route parameter fails with an error naming the parameter and the source span of the argument.
-- [ ] Loading a `.writ` file with two handlers on the same method and path fails with both source spans.
-- [ ] Loading the same path twice (idempotent re-load) returns an error rather than silently replacing state.
-- [ ] The aggregate startup error returned by `Load()` exposes its underlying entries with stable typed `Kind` values; a consumer can iterate the entries and switch on `Kind` without parsing message strings.
+- [x] Loading a `.writ` file with parse errors returns a single error whose detail lists every parser error in source order; the runtime is left unloaded.
+- [x] Loading a `.writ` file that elaborates with errors (per spec 002) returns a single error whose detail lists every elaboration error in source order; the runtime is left unloaded.
+- [x] Loading a `.writ` file that references an unregistered resolver name fails with an error naming the resolver and the source span of the referencing handler. Multiple unregistered references are all reported in a single load call.
+- [x] Loading a `.writ` file that references an unregistered formatter name fails with an error naming the formatter and the source span of the referencing handler.
+- [x] Loading a `.writ` file with a handler whose effective pipeline contains an out-of-scope stage (`session`, `csrf`, `limit`, `approve`, `commit`, `emit`, `layout`, `redirect`, `log`, `measure`) fails with an error naming the stage and its source span.
+- [x] Loading a `.writ` file where a resolver argument references an undeclared route parameter fails with an error naming the parameter and the source span of the argument.
+- [x] Loading a `.writ` file with two handlers on the same method and path fails with both source spans.
+- [x] Loading the same path twice (idempotent re-load) returns an error rather than silently replacing state.
+- [x] The aggregate startup error returned by `Load()` exposes its underlying entries with stable typed `Kind` values; a consumer can iterate the entries and switch on `Kind` without parsing message strings.
 
 ### Routing
 
-- [ ] A `GET /users/:id` handler matches `GET /users/42` with `id` bound to `"42"`.
-- [ ] A `GET /users/:id` handler does not match `POST /users/42`; the response is `405 Method Not Allowed` with `Allow: GET`.
-- [ ] A request whose path is not declared by any handler returns `404 Not Found`.
-- [ ] When two handlers are declared on the same path with different methods (e.g., `GET /users/:id` and `DELETE /users/:id`), each method dispatches to its handler and the `Allow` header on a 405 lists every declared method, comma-and-space-separated, in alphabetical order (`DELETE, GET`).
-- [ ] Path matching is exact: `/users/42` does not match a handler declared on `/users/:id/posts`.
-- [ ] Trailing slashes are not normalized: a request to `/users/` does not match a handler declared on `/users` and returns 404 (or 405 if some other method matches `/users/`).
+- [x] A `GET /users/:id` handler matches `GET /users/42` with `id` bound to `"42"`.
+- [x] A `GET /users/:id` handler does not match `POST /users/42`; the response is `405 Method Not Allowed` with `Allow: GET`.
+- [x] A request whose path is not declared by any handler returns `404 Not Found`.
+- [x] When two handlers are declared on the same path with different methods (e.g., `GET /users/:id` and `DELETE /users/:id`), each method dispatches to its handler and the `Allow` header on a 405 lists every declared method, comma-and-space-separated, in alphabetical order (`DELETE, GET`).
+- [x] Path matching is exact: `/users/42` does not match a handler declared on `/users/:id/posts`.
+- [x] Trailing slashes are not normalized: a request to `/users/` does not match a handler declared on `/users` and returns 404 (or 405 if some other method matches `/users/`).
 
 ### Resolve
 
-- [ ] When a handler declares `resolve user = db.users(:id)` and the registered `db.users` returns `{name: "Alice"}`, the formatter receives `user` mapped to that value.
-- [ ] Multiple resolve steps execute in declaration order; each result is keyed by its variable name in the formatter's input.
-- [ ] When a resolver returns a non-nil error, the response status is `500` and no formatter is invoked.
-- [ ] A handler with zero resolve steps invokes the formatter with an empty named-result table.
+- [x] When a handler declares `resolve user = db.users(:id)` and the registered `db.users` returns `{name: "Alice"}`, the formatter receives `user` mapped to that value.
+- [x] Multiple resolve steps execute in declaration order; each result is keyed by its variable name in the formatter's input.
+- [x] When a resolver returns a non-nil error, the response status is `500` and no formatter is invoked.
+- [x] A handler with zero resolve steps invokes the formatter with an empty named-result table.
 
 ### Format
 
-- [ ] When the format line is `format users.list with users` and the formatter writes `200` with a JSON body, the client receives that exact status and body.
-- [ ] A formatter that writes a status other than `200` (e.g., `201`) — the response carries that status.
-- [ ] A formatter that writes only a body without setting a status produces `200 OK` with the written body.
-- [ ] A formatter that returns an error before writing produces `500 Internal Server Error` with a generic body.
-- [ ] A formatter receives only the named results listed in the `with` clause; values resolved but not listed are not visible to it.
+- [x] When the format line is `format users.list with users` and the formatter writes `200` with a JSON body, the client receives that exact status and body.
+- [x] A formatter that writes a status other than `200` (e.g., `201`) — the response carries that status.
+- [x] A formatter that writes only a body without setting a status produces `200 OK` with the written body.
+- [x] A formatter that returns an error before writing produces `500 Internal Server Error` with a generic body.
+- [x] A formatter receives only the named results listed in the `with` clause; values resolved but not listed are not visible to it.
 
 ### Lifecycle and HTTP Boundary
 
-- [ ] `Handler()` returns a value satisfying `http.Handler`; wrapping it in a third-party middleware chain works without modification.
-- [ ] The convenience listener method binds on the port from `PORT` (default `8080`) and blocks until interrupted.
-- [ ] An unrecovered panic in a resolver or formatter propagates per `net/http` semantics (the standard library writes a 500 by default and the connection is closed). The runtime does not install its own panic recovery.
-- [ ] The runtime never reads the `.writ` file after `Load()` returns; deleting or modifying the file at runtime has no effect on serving.
-- [ ] The runtime imposes no per-request timeout; a caller's `http.Server{ReadTimeout, WriteTimeout, IdleTimeout}` configuration applies unmodified.
-- [ ] Calling `Load()` while another `Load()` is in progress on the same instance panics with a message identifying the concurrent-load violation.
+- [x] `Handler()` returns a value satisfying `http.Handler`; wrapping it in a third-party middleware chain works without modification.
+- [x] The convenience listener method binds on the port from `PORT` (default `8080`) and blocks until interrupted.
+- [x] An unrecovered panic in a resolver or formatter propagates per `net/http` semantics (the standard library writes a 500 by default and the connection is closed). The runtime does not install its own panic recovery.
+- [x] The runtime never reads the `.writ` file after `Load()` returns; deleting or modifying the file at runtime has no effect on serving.
+- [x] The runtime imposes no per-request timeout; a caller's `http.Server{ReadTimeout, WriteTimeout, IdleTimeout}` configuration applies unmodified.
+- [x] Calling `Load()` while another `Load()` is in progress on the same instance panics with a message identifying the concurrent-load violation.
 
 ### Determinism and Isolation
 
-- [ ] Two requests to the same handler do not share state; each request gets its own parameter table and named-result table.
-- [ ] `Load()` is deterministic: loading the same source file twice (in two separate processes or two separate runtime instances) produces equal routing tables.
+- [x] Two requests to the same handler do not share state; each request gets its own parameter table and named-result table.
+- [x] `Load()` is deterministic: loading the same source file twice (in two separate processes or two separate runtime instances) produces equal routing tables.
 
 ## Open Questions
 

@@ -71,13 +71,19 @@ func (w *Writ) Run(path string) error {
 	if err := w.Load(path); err != nil {
 		return err
 	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = defaultPort
-	}
 	// G114 flags ListenAndServe without a timeout-configured
 	// server. The runtime intentionally imposes no per-request
 	// timeout per spec 003 Q12; callers needing timeouts compose
 	// their own &http.Server with [Writ.Handler].
-	return http.ListenAndServe(":"+port, w.Handler()) // #nosec G114 -- timeout policy deferred per spec 003 Q12
+	return http.ListenAndServe(":"+resolvePort(), w.Handler()) // #nosec G114 -- timeout policy deferred per spec 003 Q12
+}
+
+// resolvePort returns the port Run binds on. It reads PORT from
+// the process environment and falls back to defaultPort when the
+// variable is unset or empty.
+func resolvePort() string {
+	if p := os.Getenv("PORT"); p != "" {
+		return p
+	}
+	return defaultPort
 }

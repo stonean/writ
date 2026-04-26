@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestResolvePortDefaultsTo8080(t *testing.T) {
+	t.Setenv("PORT", "")
+	if got := resolvePort(); got != "8080" {
+		t.Errorf("resolvePort with empty PORT = %q, want 8080", got)
+	}
+}
+
+func TestResolvePortReadsEnvVar(t *testing.T) {
+	t.Setenv("PORT", "9090")
+	if got := resolvePort(); got != "9090" {
+		t.Errorf("resolvePort = %q, want 9090", got)
+	}
+}
+
+func TestDefaultPortConstant(t *testing.T) {
+	if defaultPort != "8080" {
+		t.Errorf("defaultPort = %q, want 8080 (system.md reserved-var default)", defaultPort)
+	}
+}
+
 // TestRunReturnsLoadError verifies that Run does not bind a listener
 // when Load fails. This is the only path the runtime can exercise
 // deterministically without spinning up a goroutine to listen on a

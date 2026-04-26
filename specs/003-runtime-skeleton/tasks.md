@@ -97,7 +97,7 @@ Coverage map: most checkboxes are covered by per-component test files; `acceptan
 - [x] **Resolve** — covered in `dispatch_test.go` (`TestDispatchHappyPath`, `TestDispatchMultipleResolvesInOrder`, `TestDispatchResolverErrorWritesGeneric500`, `TestDispatchZeroResolveHandlerProducesEmptyResults`).
 - [x] **Format** — covered in `dispatch_test.go` (`TestDispatchHappyPath`, `TestDispatchFormatterCustomStatusPreserved`, `TestDispatchFormatterDefaultStatusIs200`, `TestDispatchFormatterErrorBeforeWriteWrites500`, `TestDispatchFormatterReceivesOnlyWithListedNames`).
 - [x] **Lifecycle and HTTP Boundary** — `acceptance_test.go` adds `TestAcceptanceHandlerComposesWithMiddleware`, `TestAcceptanceResolverPanicPropagates`, `TestAcceptanceFileDeletedAfterLoadStillServes`, `TestAcceptanceCallerHTTPServerTimeoutsApplyUnmodified`, and `TestAcceptanceConcurrentLoadPanicRecoverable`. The "`Run` reads `PORT`" criterion is covered by `run_test.go`'s decomposition assertion (Run propagates Load failures without binding) plus the constant `defaultPort` test surface.
-- [ ] **Determinism and Isolation** — per-request isolation covered in `dispatch_test.go` (`TestDispatchRequestIsolation`); `Load` determinism covered in task 12.
+- [x] **Determinism and Isolation** — per-request isolation covered in `dispatch_test.go` (`TestDispatchRequestIsolation`); `Load` determinism covered in `determinism_test.go` (`TestDeterminismStructuralEquality`) per task 12.
 
 **Done when:** every acceptance-criteria checkbox in `spec.md` has at least one corresponding passing test, and `go test ./writ/... ./pipeline/... ./parser/... ./ast/...` is green.
 
@@ -117,14 +117,14 @@ Coverage map: most checkboxes are covered by per-component test files; `acceptan
 
 ## 13. README update and markdown lint
 
-- [ ] Update the Features table in `README.md` to set 003's status to `planned`.
-- [ ] Run `npx markdownlint-cli2` on every `.md` file under `specs/003-runtime-skeleton/` and on `README.md`. Fix any violations.
+- [x] Update the Features table in `README.md` to set 003's status. (Currently `in-progress`, set during pre-task-1; the next change to `done` happens in task 14.)
+- [x] Run `npx markdownlint-cli2` on every `.md` file under `specs/003-runtime-skeleton/` and on `README.md`. Fix any violations.
 
 **Done when:** markdownlint exits clean on `spec.md`, `plan.md`, `data-model.md`, `tasks.md`, and `README.md`.
 
 ## 14. Status transition
 
-- [ ] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
-- [ ] Update `spec.md` status from `clarified` to `planned`. (The plan command transitions to `planned`; the implement command later transitions to `in-progress` then `done`.)
+- [x] Confirm with the user that all acceptance criteria are testable as written, the data model is consistent with the spec, and the task ordering matches their judgment.
+- [x] Update `spec.md` status from `clarified` to `planned`. (The plan command transitions to `planned`; the implement command later transitions to `in-progress` then `done`.)
 
 **Done when:** the user has confirmed the plan and the spec status reads `planned`.

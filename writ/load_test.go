@@ -73,6 +73,65 @@ func TestLoadParseFailureRollsBack(t *testing.T) {
 	}
 }
 
+func TestLoadElaborationFailureRollsBack(t *testing.T) {
+	// `format` in a `system` block is a stage-placement error per
+	// spec 002 (terminators are handler-only). The parser accepts
+	// the syntax; the elaborator rejects it. Load should produce
+	// KindElaborationFailure entries and roll back to stateInit.
+	path := writeWritFile(t, `system ->
+  format global.html with x
+
+GET /users ->
+  format users.list
+`)
+	w := New()
+
+	err := w.Load(path)
+	if err == nil {
+		t.Fatalf("Load returned nil; want elaboration error")
+	}
+	var werr *Error
+	if !errors.As(err, &werr) {
+		t.Fatalf("err is not *Error: %T", err)
+	}
+	found := false
+	for _, entry := range werr.Entries {
+		if entry.Kind == KindElaborationFailure {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("entries = %v, want at least one KindElaborationFailure", werr.Entries)
+	}
+	if w.state.Load() != stateInit {
+		t.Errorf("state after elaboration failure = %d, want stateInit", w.state.Load())
+	}
+}
+
+func TestLoadElaborationFailureShortCircuitsBeforeValidation(t *testing.T) {
+	// When elaboration fails, validation entries (e.g., unregistered
+	// formatter) should not leak through — the loader short-circuits.
+	path := writeWritFile(t, `system ->
+  format global.html with x
+
+GET /users ->
+  format users.list
+`)
+	w := New()
+	// Deliberately don't register `users.list`. If validation ran,
+	// we'd see a KindUnregisteredFormatter entry; we should not.
+	err := w.Load(path)
+	var werr *Error
+	if !errors.As(err, &werr) {
+		t.Fatalf("err is not *Error")
+	}
+	for _, entry := range werr.Entries {
+		if entry.Kind == KindUnregisteredFormatter {
+			t.Errorf("validation entry leaked through elaboration short-circuit: %s", entry.Message)
+		}
+	}
+}
+
 func TestLoadParseFailureShortCircuitsBeforeElaboration(t *testing.T) {
 	// Parse failure should produce only KindParseFailure entries —
 	// no elaboration or validation entries should leak through.
