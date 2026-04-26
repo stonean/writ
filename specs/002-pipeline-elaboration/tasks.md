@@ -47,11 +47,11 @@ Tasks derived from the [plan](plan.md) and [data model](data-model.md). Complete
 
 ## 6. Cross-level override engine
 
-- [ ] Create `pipeline/override.go` with `buildEffectiveStages(systemEntries []levelEntry, groupEntries [][]levelEntry, handlerEntries []levelEntry) (stages []Stage, optOuts []OptOut)` per the plan's algorithm.
-- [ ] Implement single-instance precedence: latest level wins; `<kind> none` records an opt-out unless overridden by a later level.
-- [ ] Implement multi-instance accumulation: cross-level concatenation in precedence order; `<kind> none` clears the accumulated list at and below that level.
-- [ ] Implement observational interleaving: each observational entry attaches to the canonical position of the nearest preceding semantic entry within its level; cross-level ordering places system observationals before group observationals before handler observationals at a shared anchor.
-- [ ] Add unit tests in `pipeline/override_test.go` covering each row of the spec's *Single-Instance Override*, *Multi-Instance Composition*, and *Nested Group Layering* acceptance criteria, plus the observational interleaving cases (system `log` + handler `log`, handler `log` between two `resolve`s).
+- [x] Create `pipeline/override.go` with `buildEffectiveStages(systemEntries []levelEntry, groupEntries [][]levelEntry, groupBlocks []*ast.GroupBlock, handlerEntries []levelEntry) (stages []Stage, optOuts []OptOut)` per the plan's algorithm. (Signature takes the parallel groupBlocks slice so each Stage carries its originating *ast.GroupBlock.)
+- [x] Implement single-instance precedence: latest level wins; `<kind> none` records an opt-out unless overridden by a later level.
+- [x] Implement multi-instance accumulation: cross-level concatenation in precedence order; `<kind> none` clears the accumulated list at and below that level.
+- [x] Implement observational interleaving: each observational entry attaches to the canonical position of the nearest preceding semantic entry within its level; cross-level ordering places system observationals before group observationals before handler observationals at a shared anchor.
+- [x] Add unit tests in `pipeline/override_test.go` covering each row of the spec's *Single-Instance Override*, *Multi-Instance Composition*, and *Nested Group Layering* acceptance criteria, plus the observational interleaving cases (system `log` + handler `log`, handler `log` between two `resolve`s).
 
 **Done when:** every acceptance criterion in the *Single-Instance Override*, *Multi-Instance Composition*, and *Nested Group Layering* spec sections has a passing unit test.
 

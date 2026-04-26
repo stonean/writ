@@ -10,10 +10,19 @@ import (
 // composer produces entries in canonical pipeline order with
 // observational stages floated to the source positions they occupied
 // relative to the surrounding semantic stages.
+//
+// canonicalPos is the slot the entry belongs to:
+//
+//   - For semantic entries, this is the kind's canonical position (1..9).
+//   - For observational entries, this is the canonical position of the
+//     nearest preceding semantic entry within the same level — the
+//     "anchor". 0 means the observational appeared before any semantic
+//     stage at this level.
 type levelEntry struct {
-	kind   StageKind
-	stmt   ast.Stmt
-	isNone bool
+	kind         StageKind
+	stmt         ast.Stmt
+	isNone       bool
+	canonicalPos int
 }
 
 // composeLevel walks one level's source statements (system, a group,
@@ -57,10 +66,10 @@ func composeLevel(stmts []ast.Stmt, level SourceLevel) ([]levelEntry, []Error) {
 			}
 		}
 
-		entry := levelEntry{kind: kind, stmt: stmt, isNone: isNone}
-
 		if kind.IsObservational() {
-			slots[currentSlot] = append(slots[currentSlot], entry)
+			slots[currentSlot] = append(slots[currentSlot], levelEntry{
+				kind: kind, stmt: stmt, isNone: isNone, canonicalPos: currentSlot,
+			})
 			continue
 		}
 
@@ -73,7 +82,9 @@ func composeLevel(stmts []ast.Stmt, level SourceLevel) ([]levelEntry, []Error) {
 		if canonical > highestCanonical {
 			highestCanonical = canonical
 		}
-		slots[canonical] = append(slots[canonical], entry)
+		slots[canonical] = append(slots[canonical], levelEntry{
+			kind: kind, stmt: stmt, isNone: isNone, canonicalPos: canonical,
+		})
 		currentSlot = canonical
 	}
 

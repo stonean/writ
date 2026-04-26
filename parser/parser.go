@@ -1138,10 +1138,7 @@ func (p *parser) parseCall() *ast.Call {
 // unexpected keyword position).
 func (p *parser) parseExprList() []ast.Expr {
 	var out []ast.Expr
-	for {
-		if !startsExpr(p.peek()) {
-			break
-		}
+	for startsExpr(p.peek()) {
 		expr := p.parseExpr()
 		if expr == nil {
 			break
@@ -1470,7 +1467,7 @@ func isMethodSegment(s string) bool {
 	if s == "" {
 		return false
 	}
-	if !(s[0] >= 'A' && s[0] <= 'Z') {
+	if s[0] < 'A' || s[0] > 'Z' {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
