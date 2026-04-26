@@ -1,0 +1,6 @@
+GET /users ->
+  format users.list
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format users.show with user

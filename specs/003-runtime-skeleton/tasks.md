@@ -103,8 +103,8 @@ Coverage map: most checkboxes are covered by per-component test files; `acceptan
 
 ## 11. Smoke test fixture
 
-- [ ] Create `writ/testdata/smoke.writ` with two handlers exercising the in-scope envelope: one parameterized `GET /users/:id` with one resolve and one format; one `GET /users` with zero resolves and one format.
-- [ ] Add `writ/smoke_test.go` that loads the fixture via `Load`, serves via `httptest.NewServer`, and exercises: a 200 path with parameter binding, a 405 path, a 404 path, and a deliberate resolver error producing a 500.
+- [x] Create `writ/testdata/smoke.writ` with two handlers exercising the in-scope envelope: one parameterized `GET /users/:id` with one resolve and one format; one `GET /users` with zero resolves and one format.
+- [x] Add `writ/smoke_test.go` that loads the fixture via `Load`, serves via `httptest.NewServer`, and exercises: a 200 path with parameter binding, a 405 path, a 404 path, and a deliberate resolver error producing a 500.
 
 **Done when:** the smoke test passes and exercises every routing and dispatch outcome through one fixture.
 
