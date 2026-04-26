@@ -10,7 +10,8 @@ import (
 func TestElaborateNilProgram(t *testing.T) {
 	resolved, errs := Elaborate(nil)
 	if resolved == nil {
-		t.Fatalf("Elaborate(nil) returned nil *Resolved")
+		t.Fatal("Elaborate(nil) returned nil *Resolved")
+		return
 	}
 	if len(resolved.Handlers) != 0 {
 		t.Errorf("handlers = %d, want 0", len(resolved.Handlers))
@@ -30,7 +31,8 @@ func TestElaborateEmptyProgram(t *testing.T) {
 	}
 	resolved, errs := Elaborate(prog)
 	if resolved == nil {
-		t.Fatalf("Elaborate returned nil")
+		t.Fatal("Elaborate returned nil")
+		return
 	}
 	if len(resolved.Handlers) != 0 {
 		t.Errorf("handlers = %d, want 0", len(resolved.Handlers))
@@ -53,7 +55,8 @@ func TestElaborateSystemOnlyProgram(t *testing.T) {
 	}
 	resolved, errs := Elaborate(prog)
 	if resolved == nil {
-		t.Fatalf("Elaborate returned nil")
+		t.Fatal("Elaborate returned nil")
+		return
 	}
 	if len(resolved.Handlers) != 0 {
 		t.Errorf("handlers = %d, want 0", len(resolved.Handlers))
@@ -95,8 +98,9 @@ GET /admin/dashboard ->
 		t.Fatalf("elaborate errors: %v", errs)
 	}
 	if resolved == nil {
-		t.Fatalf("Elaborate returned nil")
+		t.Fatal("Elaborate returned nil")
 	}
+	_ = resolved
 	if len(resolved.Handlers) != 2 {
 		t.Fatalf("handlers = %d, want 2", len(resolved.Handlers))
 	}

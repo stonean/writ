@@ -1195,7 +1195,8 @@ GET /users/:id ->
 `
 	r, errs := elab(t, "p.writ", src)
 	if r == nil {
-		t.Fatalf("Resolved is nil on error; must always be non-nil")
+		t.Fatal("Resolved is nil on error; must always be non-nil")
+		return
 	}
 	if len(errs) == 0 {
 		t.Fatalf("expected errors")
