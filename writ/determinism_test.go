@@ -94,6 +94,88 @@ DELETE /users/:id ->
 			if !reflect.DeepEqual(ra[i].format.with, rb[i].format.with) {
 				t.Errorf("%s[%d].format.with mismatch", m, i)
 			}
+			if len(ra[i].errorEntries) != len(rb[i].errorEntries) {
+				t.Errorf("%s[%d].errorEntries count mismatch a=%d b=%d",
+					m, i, len(ra[i].errorEntries), len(rb[i].errorEntries))
+				continue
+			}
+			for j := range ra[i].errorEntries {
+				if ra[i].errorEntries[j].typeName != rb[i].errorEntries[j].typeName {
+					t.Errorf("%s[%d].errorEntries[%d].typeName mismatch %q vs %q",
+						m, i, j, ra[i].errorEntries[j].typeName, rb[i].errorEntries[j].typeName)
+				}
+				if ra[i].errorEntries[j].isDefault != rb[i].errorEntries[j].isDefault {
+					t.Errorf("%s[%d].errorEntries[%d].isDefault mismatch %v vs %v",
+						m, i, j, ra[i].errorEntries[j].isDefault, rb[i].errorEntries[j].isDefault)
+				}
+				if !spansEqual(ra[i].errorEntries[j].span, rb[i].errorEntries[j].span) {
+					t.Errorf("%s[%d].errorEntries[%d].span mismatch", m, i, j)
+				}
+			}
+		}
+	}
+}
+
+// determinismErr is a typed error used by the determinism error-map
+// fixture. The matcher is registered but never invoked at load time
+// — the determinism test exercises compile-time structural equality,
+// not request dispatch.
+type determinismErr struct{}
+
+func (determinismErr) Error() string { return "determinism" }
+
+func TestDeterminismStructuralEqualityWithErrorMap(t *testing.T) {
+	src := `errors /* ->
+  default fallbackJSON
+
+errors /admin/* ->
+  NotFound notFoundJSON
+
+GET /admin/users/:id ->
+  resolve user = db.users(:id)
+  format users.show with user
+`
+	path := writeWritFile(t, src)
+	probe := func(label string) *routingTable {
+		w := New()
+		mustRegister(t, w.Resolver("db.users", func(_ context.Context, _ Params) (any, error) { return nil, nil }))
+		mustRegister(t, w.Formatter("users.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, _ http.ResponseWriter, _ ErrorData) error { return nil }))
+		mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, _ http.ResponseWriter, _ ErrorData) error { return nil }))
+		mustRegister(t, ErrorType[determinismErr](w, "NotFound"))
+		if err := w.Load(path); err != nil {
+			t.Fatalf("%s: Load: %v", label, err)
+		}
+		return w.table.Load()
+	}
+
+	a := probe("first")
+	b := probe("second")
+
+	for _, m := range a.methods {
+		ra := a.byMethod[m]
+		rb := b.byMethod[m]
+		for i := range ra {
+			if len(ra[i].errorEntries) == 0 {
+				t.Fatalf("%s[%d] expected populated errorEntries; fixture should match the handler", m, i)
+			}
+			if len(ra[i].errorEntries) != len(rb[i].errorEntries) {
+				t.Fatalf("%s[%d].errorEntries len mismatch a=%d b=%d",
+					m, i, len(ra[i].errorEntries), len(rb[i].errorEntries))
+			}
+			for j := range ra[i].errorEntries {
+				if ra[i].errorEntries[j].typeName != rb[i].errorEntries[j].typeName {
+					t.Errorf("%s[%d].errorEntries[%d].typeName mismatch %q vs %q",
+						m, i, j, ra[i].errorEntries[j].typeName, rb[i].errorEntries[j].typeName)
+				}
+				if ra[i].errorEntries[j].isDefault != rb[i].errorEntries[j].isDefault {
+					t.Errorf("%s[%d].errorEntries[%d].isDefault mismatch %v vs %v",
+						m, i, j, ra[i].errorEntries[j].isDefault, rb[i].errorEntries[j].isDefault)
+				}
+				if !spansEqual(ra[i].errorEntries[j].span, rb[i].errorEntries[j].span) {
+					t.Errorf("%s[%d].errorEntries[%d].span mismatch", m, i, j)
+				}
+			}
 		}
 	}
 }

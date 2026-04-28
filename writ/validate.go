@@ -34,15 +34,55 @@ func validate(
 	resolved *pipeline.Resolved,
 	resolvers map[string]ResolverFunc,
 	formatters map[string]FormatterFunc,
+	errorFormatters map[string]ErrorFormatterFunc,
+	errorTypes map[string]func(error) bool,
 ) (*routingTable, []Entry) {
 	var entries []Entry
 
 	entries = append(entries, checkPipelineShape(resolved)...)
-	table, compileEntries := compileRoutes(resolved, resolvers, formatters)
+	table, compileEntries := compileRoutes(resolved, resolvers, formatters, errorFormatters, errorTypes)
 	entries = append(entries, compileEntries...)
 	entries = append(entries, checkRouteAmbiguity(resolved)...)
+	for _, h := range resolved.Handlers {
+		entries = append(entries, checkErrorMap(h, errorTypes, errorFormatters)...)
+	}
 
 	return table, entries
+}
+
+// checkErrorMap walks one handler's effective error map and reports
+// every reference to an unregistered error type or error formatter.
+// The `default` keyword is exempt from the type-registration check
+// because it has no associated Go type.
+//
+// Entries are appended in declaration order: each errors-block entry
+// can produce zero, one, or two new validation entries depending on
+// which references are missing.
+func checkErrorMap(
+	h *pipeline.Handler,
+	errorTypes map[string]func(error) bool,
+	errorFormatters map[string]ErrorFormatterFunc,
+) []Entry {
+	var entries []Entry
+	for _, e := range h.ErrorMap {
+		if !e.IsDefault {
+			if _, ok := errorTypes[e.TypeName]; !ok {
+				entries = append(entries, Entry{
+					Kind:    KindUnregisteredErrorType,
+					Message: fmt.Sprintf("error type %q is not registered", e.TypeName),
+					Span:    e.TypeSpan,
+				})
+			}
+		}
+		if _, ok := errorFormatters[e.Formatter]; !ok {
+			entries = append(entries, Entry{
+				Kind:    KindUnregisteredErrorFormatter,
+				Message: fmt.Sprintf("error formatter %q is not registered", e.Formatter),
+				Span:    e.FormatterSpan,
+			})
+		}
+	}
+	return entries
 }
 
 // checkPipelineShape emits an entry for every handler whose

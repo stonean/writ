@@ -1,0 +1,11 @@
+errors /widgets/* ->
+  NotFound notFoundJSON
+  default fallbackJSON
+
+GET /widgets/:id ->
+  resolve widget = thing.lookup(:id)
+  format widget.show with widget
+
+GET /ping ->
+  resolve out = thing.ping()
+  format pong with out

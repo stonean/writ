@@ -13,7 +13,7 @@ func TestValidateUnregisteredResolver(t *testing.T) {
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUnregisteredResolver {
 		t.Fatalf("entries = %v, want one KindUnregisteredResolver", entries)
 	}
@@ -28,7 +28,7 @@ func TestValidateUnregisteredFormatter(t *testing.T) {
 `
 	resolved := mustElaborate(t, src)
 
-	_, entries := validate(resolved, nil, nil)
+	_, entries := validate(resolved, nil, nil, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUnregisteredFormatter {
 		t.Fatalf("entries = %v, want one KindUnregisteredFormatter", entries)
 	}
@@ -46,7 +46,7 @@ func TestValidateUndeclaredRouteParameter(t *testing.T) {
 	resolvers := map[string]ResolverFunc{"db.other": noopResolver}
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	_, entries := validate(resolved, resolvers, formatters)
+	_, entries := validate(resolved, resolvers, formatters, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUndeclaredRouteParameter {
 		t.Fatalf("entries = %v, want one KindUndeclaredRouteParameter", entries)
 	}
@@ -69,7 +69,7 @@ func TestValidateUnsupportedStageReportedByPipelineShapeCheck(t *testing.T) {
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	found := false
 	for _, e := range entries {
 		if e.Kind == KindUnsupportedStage && strings.Contains(e.Message, "approve") {
@@ -95,7 +95,7 @@ GET /users/:user_id ->
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"users.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	found := false
 	for _, e := range entries {
 		if e.Kind == KindRouteAmbiguity {
@@ -126,7 +126,7 @@ GET /users/:slug ->
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"users.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	for _, e := range entries {
 		if e.Kind != KindRouteAmbiguity {
 			continue
@@ -147,7 +147,7 @@ POST /users/:id ->
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"users.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	for _, e := range entries {
 		if e.Kind == KindRouteAmbiguity {
 			t.Errorf("different methods should not collide, got %v", e)
@@ -168,7 +168,7 @@ func TestValidatePipelineShapeBackstopCatchesNoFormat(t *testing.T) {
 
 	formatters := map[string]FormatterFunc{"users.show": noopFormatter}
 
-	_, entries := validate(resolved, nil, formatters)
+	_, entries := validate(resolved, nil, formatters, nil, nil)
 	found := false
 	for _, e := range entries {
 		if e.Kind == KindUnsupportedStage && strings.Contains(e.Message, "exactly one format") {
@@ -198,4 +198,202 @@ func TestCanonicalPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateUnregisteredErrorFormatter(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorTypes := map[string]func(error) bool{"NotFound": func(error) bool { return true }}
+
+	_, entries := validate(resolved, resolvers, formatters, nil, errorTypes)
+	found := false
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorFormatter && strings.Contains(e.Message, "notFoundJSON") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want a KindUnregisteredErrorFormatter naming notFoundJSON", entries)
+	}
+}
+
+func TestValidateUnregisteredErrorType(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorFormatters := map[string]ErrorFormatterFunc{"notFoundJSON": noopErrorFormatter}
+
+	_, entries := validate(resolved, resolvers, formatters, errorFormatters, nil)
+	found := false
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorType && strings.Contains(e.Message, "NotFound") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want a KindUnregisteredErrorType naming NotFound", entries)
+	}
+}
+
+func TestValidateUnregisteredErrorBothMissingReportsBoth(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+
+	_, entries := validate(resolved, resolvers, formatters, nil, nil)
+	gotType, gotFmt := false, false
+	for _, e := range entries {
+		switch e.Kind {
+		case KindUnregisteredErrorType:
+			gotType = true
+		case KindUnregisteredErrorFormatter:
+			gotFmt = true
+		}
+	}
+	if !gotType || !gotFmt {
+		t.Fatalf("entries = %v, want both KindUnregisteredErrorType and KindUnregisteredErrorFormatter", entries)
+	}
+}
+
+func TestValidateDefaultEntryFlagsMissingFormatter(t *testing.T) {
+	src := `errors /users/* ->
+  default defaultJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+
+	_, entries := validate(resolved, resolvers, formatters, nil, nil)
+	found := false
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorFormatter && strings.Contains(e.Message, "defaultJSON") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want KindUnregisteredErrorFormatter for the default formatter", entries)
+	}
+}
+
+func TestValidateDefaultEntryExemptFromTypeCheck(t *testing.T) {
+	src := `errors /users/* ->
+  default defaultJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorFormatters := map[string]ErrorFormatterFunc{"defaultJSON": noopErrorFormatter}
+
+	_, entries := validate(resolved, resolvers, formatters, errorFormatters, nil)
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorType {
+			t.Errorf("default entry should be exempt from type registration check, got %v", e)
+		}
+	}
+}
+
+func TestValidateNoErrorsBlockProducesNoErrorEntries(t *testing.T) {
+	src := `GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+
+	_, entries := validate(resolved, resolvers, formatters, nil, nil)
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorFormatter || e.Kind == KindUnregisteredErrorType {
+			t.Errorf("no errors block should produce no error-related entries, got %v", e)
+		}
+	}
+}
+
+func TestValidateSuccessFormatterDoesNotSatisfyErrorFormatterCheck(t *testing.T) {
+	src := `errors /users/* ->
+  default sameName
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format sameName with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"sameName": noopFormatter}
+
+	// errorFormatters does NOT contain "sameName" — only the success
+	// registry does. The error-formatter check must still fire.
+	_, entries := validate(resolved, resolvers, formatters, nil, nil)
+	found := false
+	for _, e := range entries {
+		if e.Kind == KindUnregisteredErrorFormatter && strings.Contains(e.Message, "sameName") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want KindUnregisteredErrorFormatter (success-formatter registration must not satisfy the error-formatter check)", entries)
+	}
+}
+
+func TestValidateUnregisteredErrorFormatterCarriesFormatterSpan(t *testing.T) {
+	// KindUnregisteredErrorFormatter must reference the originating
+	// errors-block entry's formatter span. Spec acceptance:
+	// "Source provenance — KindUnregisteredErrorFormatter carries
+	// the originating errors entry's span."
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorTypes := map[string]func(error) bool{"NotFound": func(error) bool { return true }}
+
+	_, entries := validate(resolved, resolvers, formatters, nil, errorTypes)
+	for _, e := range entries {
+		if e.Kind != KindUnregisteredErrorFormatter {
+			continue
+		}
+		if e.Span.Start.Source == nil {
+			t.Fatalf("KindUnregisteredErrorFormatter span has no source: %+v", e.Span)
+		}
+		if e.Span.Start.Line == 0 {
+			t.Fatalf("KindUnregisteredErrorFormatter span has zero line: %+v", e.Span)
+		}
+		return
+	}
+	t.Fatalf("entries = %v, want a KindUnregisteredErrorFormatter", entries)
 }

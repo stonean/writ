@@ -62,7 +62,7 @@ func (w *Writ) Load(path string) error {
 
 	// Pass 3+4+5: validation orchestrates per-stage checks, the
 	// pipeline-shape backstop, and route ambiguity.
-	table, entries := validate(resolved, w.resolvers, w.formatters)
+	table, entries := validate(resolved, w.resolvers, w.formatters, w.errorFormatters, w.errorTypes)
 	if len(entries) > 0 {
 		rolledBack = true
 		return &Error{Entries: entries}

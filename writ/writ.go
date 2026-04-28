@@ -35,11 +35,13 @@ const (
 // instance per case. Registrations are accepted while the instance
 // is in its initial state and must be complete before [Writ.Load].
 type Writ struct {
-	state      atomic.Uint32
-	resolvers  map[string]ResolverFunc
-	formatters map[string]FormatterFunc
-	table      atomic.Pointer[routingTable]
-	writEnv    string
+	state           atomic.Uint32
+	resolvers       map[string]ResolverFunc
+	formatters      map[string]FormatterFunc
+	errorFormatters map[string]ErrorFormatterFunc
+	errorTypes      map[string]func(error) bool
+	table           atomic.Pointer[routingTable]
+	writEnv         string
 }
 
 // New returns a fresh runtime instance with no registrations and no
@@ -51,9 +53,11 @@ func New() *Writ {
 		env = defaultWritEnv
 	}
 	return &Writ{
-		resolvers:  make(map[string]ResolverFunc),
-		formatters: make(map[string]FormatterFunc),
-		writEnv:    env,
+		resolvers:       make(map[string]ResolverFunc),
+		formatters:      make(map[string]FormatterFunc),
+		errorFormatters: make(map[string]ErrorFormatterFunc),
+		errorTypes:      make(map[string]func(error) bool),
+		writEnv:         env,
 	}
 }
 

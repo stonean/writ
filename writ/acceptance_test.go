@@ -358,3 +358,213 @@ func TestAcceptanceConcurrentLoadPanicRecoverable(t *testing.T) {
 	}()
 	_ = w.Load("/anything")
 }
+
+// =====================================================================
+// Errors block runtime — spec 004 acceptance criteria
+// =====================================================================
+
+// acceptanceNotFoundErr is a typed error used by spec-004 acceptance
+// tests. It implements StatusCode() so the runtime resolves to 404.
+type acceptanceNotFoundErr struct{ key string }
+
+func (acceptanceNotFoundErr) Error() string   { return "not found" }
+func (acceptanceNotFoundErr) StatusCode() int { return http.StatusNotFound }
+
+func TestAcceptanceErrorsLoadFailsWhenErrorFormatterUnregistered(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	path := writeWritFile(t, src)
+	w := New()
+	mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) { return nil, nil }))
+	mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+	mustRegister(t, ErrorType[acceptanceNotFoundErr](w, "NotFound"))
+
+	err := w.Load(path)
+	if err == nil {
+		t.Fatalf("Load returned nil; want KindUnregisteredErrorFormatter")
+	}
+	var werr *Error
+	if !errors.As(err, &werr) {
+		t.Fatalf("err is not *Error: %T", err)
+	}
+	found := false
+	for _, e := range werr.Entries {
+		if e.Kind == KindUnregisteredErrorFormatter {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want a KindUnregisteredErrorFormatter", werr.Entries)
+	}
+}
+
+func TestAcceptanceErrorsLoadFailsWhenErrorTypeUnregistered(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	path := writeWritFile(t, src)
+	w := New()
+	mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) { return nil, nil }))
+	mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+	mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, _ http.ResponseWriter, _ ErrorData) error { return nil }))
+
+	err := w.Load(path)
+	if err == nil {
+		t.Fatalf("Load returned nil; want KindUnregisteredErrorType")
+	}
+	var werr *Error
+	if !errors.As(err, &werr) {
+		t.Fatalf("err is not *Error: %T", err)
+	}
+	found := false
+	for _, e := range werr.Entries {
+		if e.Kind == KindUnregisteredErrorType {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %v, want a KindUnregisteredErrorType", werr.Entries)
+	}
+}
+
+func TestAcceptanceErrorsTypePointerMatch(t *testing.T) {
+	// errors.As is not pointer-vs-value uniform: a resolver returning
+	// a *NotFound pointer matches only when the registration is
+	// ErrorType[*NotFound]. The runtime does not auto-promote.
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, &acceptanceNotFoundErr{key: "x"}
+		}))
+		mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+		mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, rw http.ResponseWriter, data ErrorData) error {
+			rw.WriteHeader(data.Status())
+			_, _ = rw.Write([]byte("matched"))
+			return nil
+		}))
+		mustRegister(t, ErrorType[*acceptanceNotFoundErr](w, "NotFound"))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+	if body != "matched" {
+		t.Errorf("body = %q, want %q (pointer registration matches pointer return)", body, "matched")
+	}
+}
+
+func TestAcceptanceErrorsTypeWrappedErrorMatch(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			// Wrap the typed error using fmt.Errorf with %w.
+			return nil, fmt.Errorf("loading user: %w", acceptanceNotFoundErr{key: "x"})
+		}))
+		mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+		mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, rw http.ResponseWriter, _ ErrorData) error {
+			_, _ = rw.Write([]byte("matched"))
+			return nil
+		}))
+		mustRegister(t, ErrorType[acceptanceNotFoundErr](w, "NotFound"))
+	})
+
+	_, body := getBody(t, srv.URL+"/users/42")
+	if body != "matched" {
+		t.Errorf("body = %q, want %q (wrapped errors must match via errors.As Unwrap chain)", body, "matched")
+	}
+}
+
+func TestAcceptanceErrorsDefaultOnlyMatchesAnyType(t *testing.T) {
+	src := `errors /users/* ->
+  default fallbackJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			// An unregistered error type — the default entry must
+			// still match.
+			return nil, errors.New("anything")
+		}))
+		mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, rw http.ResponseWriter, _ ErrorData) error {
+			_, _ = rw.Write([]byte("default"))
+			return nil
+		}))
+	})
+
+	_, body := getBody(t, srv.URL+"/users/42")
+	if body != "default" {
+		t.Errorf("body = %q, want %q (default entry must match every error type)", body, "default")
+	}
+}
+
+func TestAcceptanceErrorsUnusedRegistrationIsAccepted(t *testing.T) {
+	// A program that registers ErrorFormatter / ErrorType[T] but
+	// declares no errors block must load cleanly. Registrations are
+	// silently accepted, symmetric with spec-003 success formatters.
+	src := `GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format ok with user
+`
+	w := New()
+	mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) { return nil, nil }))
+	mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+	mustRegister(t, w.ErrorFormatter("unusedJSON", func(_ context.Context, _ http.ResponseWriter, _ ErrorData) error { return nil }))
+	mustRegister(t, ErrorType[acceptanceNotFoundErr](w, "UnusedType"))
+
+	if err := w.Load(writeWritFile(t, src)); err != nil {
+		t.Fatalf("Load failed; unused error registrations should be silently accepted: %v", err)
+	}
+}
+
+func TestAcceptanceErrorsBackwardCompatibilityNoErrorsBlock(t *testing.T) {
+	// A program loaded under spec 003 that declares no errors block
+	// continues to behave identically: resolver errors produce the
+	// runtime-owned 500 with the same generic body and headers.
+	src := `GET /users ->
+  resolve out = thing.boom()
+  format ok with out
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.boom", func(_ context.Context, _ Params) (any, error) {
+			return nil, errors.New("internal: kaboom")
+		}))
+		mustRegister(t, w.Formatter("ok", func(_ context.Context, _ http.ResponseWriter, _ Results) error { return nil }))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if body != "500 Internal Server Error\n" {
+		t.Errorf("body = %q, want spec-003 generic 500 (backward compatibility)", body)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want text/plain; charset=utf-8", got)
+	}
+}

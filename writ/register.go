@@ -57,6 +57,37 @@ func (w *Writ) Formatter(name string, fn FormatterFunc) error {
 	return nil
 }
 
+// ErrorFormatter registers fn under name in the error-formatter
+// registry. Returns an error when name is already registered as an
+// error formatter. Panics when called after [Writ.Load].
+//
+// Error formatters live in a namespace independent of success
+// formatters (registered via [Writ.Formatter]) and error types
+// (registered via [ErrorType]); the same name may appear in all
+// three registries without collision.
+func (w *Writ) ErrorFormatter(name string, fn ErrorFormatterFunc) error {
+	w.mustBeInit("ErrorFormatter")
+	if _, exists := w.errorFormatters[name]; exists {
+		return fmt.Errorf("error formatter %q is already registered", name)
+	}
+	w.errorFormatters[name] = fn
+	return nil
+}
+
+// registerErrorType stores matcher under name in the error-type
+// registry. Returns an error when name is already registered as an
+// error type. Panics when called after [Writ.Load]. Unexported
+// because all callers go through [ErrorType], the top-level generic
+// helper that constructs the matcher closure.
+func (w *Writ) registerErrorType(name string, matcher func(error) bool) error {
+	w.mustBeInit("ErrorType")
+	if _, exists := w.errorTypes[name]; exists {
+		return fmt.Errorf("error type %q is already registered", name)
+	}
+	w.errorTypes[name] = matcher
+	return nil
+}
+
 // mustBeInit panics with a clear message when the runtime has moved
 // beyond stateInit. The caller name appears in the panic message so
 // the developer can locate the offending registration.

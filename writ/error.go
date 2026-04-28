@@ -41,6 +41,14 @@ const (
 	// future feature; the skeleton iteration emits no entries of
 	// this kind because PORT and WRIT_ENV both have defaults.
 	KindMissingEnvVar
+	// KindUnregisteredErrorFormatter indicates an `errors` block in
+	// the DSL references a formatter name that was not registered
+	// via [Writ.ErrorFormatter].
+	KindUnregisteredErrorFormatter
+	// KindUnregisteredErrorType indicates an `errors` block in the
+	// DSL references a non-default error type name that was not
+	// registered via [ErrorType].
+	KindUnregisteredErrorType
 )
 
 // String returns the lowercase identifier of the kind, suitable for
@@ -63,6 +71,10 @@ func (k ErrorKind) String() string {
 		return "route-ambiguity"
 	case KindMissingEnvVar:
 		return "missing-env-var"
+	case KindUnregisteredErrorFormatter:
+		return "unregistered-error-formatter"
+	case KindUnregisteredErrorType:
+		return "unregistered-error-type"
 	}
 	return fmt.Sprintf("ErrorKind(%d)", int(k))
 }

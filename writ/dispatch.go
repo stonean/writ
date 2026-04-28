@@ -50,7 +50,7 @@ func (w *Writ) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, step := range route.resolves {
 		val, err := step.fn(ctx, paramsForCall(params, step.paramArgs))
 		if err != nil {
-			write500(rw)
+			handleResolverError(rw, req, route, err)
 			return
 		}
 		results[step.name] = val

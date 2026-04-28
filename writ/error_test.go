@@ -10,14 +10,16 @@ import (
 
 func TestErrorKindString(t *testing.T) {
 	cases := map[ErrorKind]string{
-		KindParseFailure:             "parse-failure",
-		KindElaborationFailure:       "elaboration-failure",
-		KindUnregisteredResolver:     "unregistered-resolver",
-		KindUnregisteredFormatter:    "unregistered-formatter",
-		KindUnsupportedStage:         "unsupported-stage",
-		KindUndeclaredRouteParameter: "undeclared-route-parameter",
-		KindRouteAmbiguity:           "route-ambiguity",
-		KindMissingEnvVar:            "missing-env-var",
+		KindParseFailure:               "parse-failure",
+		KindElaborationFailure:         "elaboration-failure",
+		KindUnregisteredResolver:       "unregistered-resolver",
+		KindUnregisteredFormatter:      "unregistered-formatter",
+		KindUnsupportedStage:           "unsupported-stage",
+		KindUndeclaredRouteParameter:   "undeclared-route-parameter",
+		KindRouteAmbiguity:             "route-ambiguity",
+		KindMissingEnvVar:              "missing-env-var",
+		KindUnregisteredErrorFormatter: "unregistered-error-formatter",
+		KindUnregisteredErrorType:      "unregistered-error-type",
 	}
 	for kind, want := range cases {
 		if got := kind.String(); got != want {

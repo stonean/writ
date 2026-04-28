@@ -23,12 +23,26 @@ type routingTable struct {
 // compile time so the request path performs no map lookups against
 // the registration tables.
 type compiledRoute struct {
-	method     string
-	segments   []ast.RouteSegment
-	paramNames []string
-	resolves   []resolveStep
-	format     formatStep
-	span       ast.Span
+	method       string
+	segments     []ast.RouteSegment
+	paramNames   []string
+	resolves     []resolveStep
+	format       formatStep
+	errorEntries []compiledErrorEntry
+	span         ast.Span
+}
+
+// compiledErrorEntry is one row of a handler's effective error map
+// pre-resolved at compile time. The dispatcher walks the slice on
+// the resolver-error path; entries appear in declaration order from
+// pipeline.Handler.ErrorMap, which spec 002 documents as
+// most-specific-first.
+type compiledErrorEntry struct {
+	typeName  string             // DSL identifier from the errors-block entry; "default" for the catch-all
+	isDefault bool               // true when the entry's left-hand side is `default`
+	matcher   func(error) bool   // closure stored under typeName in errorTypes; nil when isDefault is true
+	formatter ErrorFormatterFunc // pre-resolved at compile time from errorFormatters
+	span      ast.Span           // originating *ast.ErrorsEntry span for diagnostics
 }
 
 // resolveStep carries everything the dispatcher needs to invoke a
@@ -58,13 +72,15 @@ func compileRoutes(
 	resolved *pipeline.Resolved,
 	resolvers map[string]ResolverFunc,
 	formatters map[string]FormatterFunc,
+	errorFormatters map[string]ErrorFormatterFunc,
+	errorTypes map[string]func(error) bool,
 ) (*routingTable, []Entry) {
 	table := &routingTable{byMethod: make(map[string][]*compiledRoute)}
 	var entries []Entry
 	methodsSeen := map[string]struct{}{}
 
 	for _, h := range resolved.Handlers {
-		route, hEntries := compileHandler(h, resolvers, formatters)
+		route, hEntries := compileHandler(h, resolvers, formatters, errorFormatters, errorTypes)
 		entries = append(entries, hEntries...)
 		if route == nil {
 			continue
@@ -86,6 +102,8 @@ func compileHandler(
 	h *pipeline.Handler,
 	resolvers map[string]ResolverFunc,
 	formatters map[string]FormatterFunc,
+	errorFormatters map[string]ErrorFormatterFunc,
+	errorTypes map[string]func(error) bool,
 ) (*compiledRoute, []Entry) {
 	var entries []Entry
 
@@ -120,6 +138,25 @@ func compileHandler(
 				Span:    stage.Span(),
 			})
 		}
+	}
+
+	// Compile the effective error map. Order is preserved verbatim
+	// from pipeline.Handler.ErrorMap (most-specific-first per spec
+	// 002). When a referenced name is unregistered, the validation
+	// pass reports it; the compile-time lookup here is allowed to
+	// produce a nil function pointer because the route is dropped
+	// (along with the rest of the load) when entries is non-empty.
+	for _, e := range h.ErrorMap {
+		entry := compiledErrorEntry{
+			typeName:  e.TypeName,
+			isDefault: e.IsDefault,
+			span:      e.TypeSpan,
+		}
+		if !e.IsDefault {
+			entry.matcher = errorTypes[e.TypeName]
+		}
+		entry.formatter = errorFormatters[e.Formatter]
+		route.errorEntries = append(route.errorEntries, entry)
 	}
 
 	// A handler that did not compile a format step cannot be served.

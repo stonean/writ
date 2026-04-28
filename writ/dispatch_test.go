@@ -354,6 +354,272 @@ func TestDispatchRequestIsolation(t *testing.T) {
 	}
 }
 
+// ---- errors-block dispatch tests (spec 004) ----
+
+// dispatchNotFoundErr is a typed error used by the errors-block
+// dispatch tests. It implements StatusCode() so the runtime resolves
+// to 404; tests assert that registered error formatters receive that
+// status via ErrorData.Status().
+type dispatchNotFoundErr struct{ key string }
+
+func (dispatchNotFoundErr) Error() string   { return "not found" }
+func (dispatchNotFoundErr) StatusCode() int { return http.StatusNotFound }
+
+// dispatchValidationErr is a typed error without StatusCode(); the
+// runtime defaults to 500 when the errors-block formatter does not
+// override it.
+type dispatchValidationErr struct{ field string }
+
+func (dispatchValidationErr) Error() string { return "invalid" }
+
+func TestDispatchErrorsBlockConcreteTypeMatchInvokesFormatter(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, p Params) (any, error) {
+			return nil, dispatchNotFoundErr{key: p.String("id")}
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			t.Fatalf("success formatter should not run when resolver errored")
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, rw http.ResponseWriter, data ErrorData) error {
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(data.Status())
+			_, _ = fmt.Fprintf(rw, `{"err":%q,"status":%d}`, data.Err().Error(), data.Status())
+			return nil
+		}))
+		mustRegister(t, ErrorType[dispatchNotFoundErr](w, "NotFound"))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (formatter wrote ErrorData.Status())", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", got)
+	}
+	want := `{"err":"not found","status":404}`
+	if body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+}
+
+func TestDispatchErrorsBlockDefaultMatchInvokesFormatter(t *testing.T) {
+	src := `errors /users/* ->
+  default fallbackJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, errors.New("anything goes")
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, rw http.ResponseWriter, data ErrorData) error {
+			rw.WriteHeader(data.Status())
+			_, _ = fmt.Fprintf(rw, "default:%s", data.Err().Error())
+			return nil
+		}))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500 (no StatusCode on plain error)", resp.StatusCode)
+	}
+	if body != "default:anything goes" {
+		t.Errorf("body = %q, want %q", body, "default:anything goes")
+	}
+}
+
+func TestDispatchErrorsBlockConcreteWinsOverDefault(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+  default fallbackJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, dispatchNotFoundErr{key: "x"}
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("notFoundJSON", func(_ context.Context, rw http.ResponseWriter, _ ErrorData) error {
+			_, _ = rw.Write([]byte("concrete"))
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, rw http.ResponseWriter, _ ErrorData) error {
+			_, _ = rw.Write([]byte("default"))
+			return nil
+		}))
+		mustRegister(t, ErrorType[dispatchNotFoundErr](w, "NotFound"))
+	})
+
+	_, body := getBody(t, srv.URL+"/users/42")
+	if body != "concrete" {
+		t.Errorf("body = %q, want %q (concrete-type entry must win over default)", body, "concrete")
+	}
+}
+
+func TestDispatchErrorsBlockNoMatchWithStatusCodeWritesPlainText(t *testing.T) {
+	// No errors block — the runtime falls through to the Q3 plain-text
+	// fallback because the error implements StatusCode().
+	src := `GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, dispatchNotFoundErr{key: "x"}
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (StatusCode() honored on no-match path)", resp.StatusCode)
+	}
+	if body != "404 Not Found\n" {
+		t.Errorf("body = %q, want %q", body, "404 Not Found\n")
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want text/plain; charset=utf-8", got)
+	}
+}
+
+func TestDispatchErrorsBlockNoMatchWithoutStatusCodeWrites500(t *testing.T) {
+	// No errors block — the runtime falls through to spec-003's
+	// generic 500 because the error has no StatusCode().
+	src := `GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, dispatchValidationErr{field: "x"}
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if body != "500 Internal Server Error\n" {
+		t.Errorf("body = %q, want spec-003 generic 500", body)
+	}
+}
+
+func TestDispatchErrorFormatterPreWriteErrorWrites500(t *testing.T) {
+	src := `errors /users/* ->
+  default fallbackJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, errors.New("boom")
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, _ http.ResponseWriter, _ ErrorData) error {
+			return errors.New("formatter exploded before writing")
+		}))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if body != "500 Internal Server Error\n" {
+		t.Errorf("body = %q, want generic 500", body)
+	}
+}
+
+func TestDispatchErrorFormatterPostWriteErrorPreservesPartialResponse(t *testing.T) {
+	src := `errors /users/* ->
+  default fallbackJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, errors.New("boom")
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("fallbackJSON", func(_ context.Context, rw http.ResponseWriter, _ ErrorData) error {
+			rw.WriteHeader(http.StatusTeapot)
+			_, _ = rw.Write([]byte("partial err body"))
+			return errors.New("late failure")
+		}))
+	})
+
+	resp, body := getBody(t, srv.URL+"/users/42")
+	if resp.StatusCode != http.StatusTeapot {
+		t.Errorf("status = %d, want 418 (partial response preserved)", resp.StatusCode)
+	}
+	if body != "partial err body" {
+		t.Errorf("body = %q, want %q", body, "partial err body")
+	}
+}
+
+func TestDispatchErrorDataRequestReturnsOriginatingRequest(t *testing.T) {
+	src := `errors /users/* ->
+  default echoJSON
+
+GET /users/:id ->
+  resolve user = thing.lookup(:id)
+  format user.show with user
+`
+	srv := loadTestRuntime(t, src, func(w *Writ) {
+		mustRegister(t, w.Resolver("thing.lookup", func(_ context.Context, _ Params) (any, error) {
+			return nil, errors.New("boom")
+		}))
+		mustRegister(t, w.Formatter("user.show", func(_ context.Context, _ http.ResponseWriter, _ Results) error {
+			return nil
+		}))
+		mustRegister(t, w.ErrorFormatter("echoJSON", func(_ context.Context, rw http.ResponseWriter, data ErrorData) error {
+			req := data.Request()
+			if req == nil {
+				t.Fatalf("ErrorData.Request() returned nil")
+			}
+			rw.Header().Set("X-Trace", req.Method+" "+req.URL.Path)
+			rw.WriteHeader(data.Status())
+			_, _ = rw.Write([]byte("ok"))
+			return nil
+		}))
+	})
+
+	resp, _ := getBody(t, srv.URL+"/users/42")
+	if got := resp.Header.Get("X-Trace"); got != "GET /users/42" {
+		t.Errorf("X-Trace = %q, want %q", got, "GET /users/42")
+	}
+}
+
 // ---- test helpers ----
 
 func mustRegister(t *testing.T, err error) {

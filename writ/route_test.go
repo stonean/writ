@@ -259,7 +259,7 @@ func TestCompileRoutesHappyPath(t *testing.T) {
 	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	tbl, entries := compileRoutes(resolved, resolvers, formatters)
+	tbl, entries := compileRoutes(resolved, resolvers, formatters, nil, nil)
 	if len(entries) != 0 {
 		t.Fatalf("compileRoutes returned entries: %v", entries)
 	}
@@ -289,7 +289,7 @@ func TestCompileRoutesUnregisteredResolverEntry(t *testing.T) {
 	resolved := mustElaborate(t, src)
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	_, entries := compileRoutes(resolved, nil, formatters)
+	_, entries := compileRoutes(resolved, nil, formatters, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUnregisteredResolver {
 		t.Fatalf("entries = %v, want one KindUnregisteredResolver", entries)
 	}
@@ -301,7 +301,7 @@ func TestCompileRoutesUnregisteredFormatterEntry(t *testing.T) {
 `
 	resolved := mustElaborate(t, src)
 
-	_, entries := compileRoutes(resolved, nil, nil)
+	_, entries := compileRoutes(resolved, nil, nil, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUnregisteredFormatter {
 		t.Fatalf("entries = %v, want one KindUnregisteredFormatter", entries)
 	}
@@ -316,7 +316,7 @@ func TestCompileRoutesUndeclaredRouteParameter(t *testing.T) {
 	resolvers := map[string]ResolverFunc{"db.other": noopResolver}
 	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
 
-	_, entries := compileRoutes(resolved, resolvers, formatters)
+	_, entries := compileRoutes(resolved, resolvers, formatters, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUndeclaredRouteParameter {
 		t.Fatalf("entries = %v, want one KindUndeclaredRouteParameter", entries)
 	}
@@ -334,8 +334,146 @@ func TestCompileRoutesNonRouteParamArgIsRejected(t *testing.T) {
 	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
 	formatters := map[string]FormatterFunc{"users.list": noopFormatter}
 
-	_, entries := compileRoutes(resolved, resolvers, formatters)
+	_, entries := compileRoutes(resolved, resolvers, formatters, nil, nil)
 	if len(entries) != 1 || entries[0].Kind != KindUndeclaredRouteParameter {
 		t.Fatalf("entries = %v, want one KindUndeclaredRouteParameter for non-:name arg", entries)
+	}
+}
+
+// noopErrorFormatter is a placeholder error formatter used by the
+// compiled-error-entry tests. The dispatch tests (task 7) exercise
+// real error-formatter behavior end-to-end.
+func noopErrorFormatter(_ context.Context, _ http.ResponseWriter, _ ErrorData) error { return nil }
+
+func TestCompileRoutesEmptyErrorMap(t *testing.T) {
+	src := `GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+
+	tbl, entries := compileRoutes(resolved, resolvers, formatters, nil, nil)
+	if len(entries) != 0 {
+		t.Fatalf("compileRoutes returned entries: %v", entries)
+	}
+	r := tbl.byMethod["GET"][0]
+	if len(r.errorEntries) != 0 {
+		t.Errorf("errorEntries = %v, want empty for handler with no errors block", r.errorEntries)
+	}
+}
+
+func TestCompileRoutesConcreteTypeErrorEntry(t *testing.T) {
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorFormatters := map[string]ErrorFormatterFunc{"notFoundJSON": noopErrorFormatter}
+	errorTypes := map[string]func(error) bool{"NotFound": func(error) bool { return true }}
+
+	tbl, entries := compileRoutes(resolved, resolvers, formatters, errorFormatters, errorTypes)
+	if len(entries) != 0 {
+		t.Fatalf("compileRoutes returned entries: %v", entries)
+	}
+	r := tbl.byMethod["GET"][0]
+	if got := len(r.errorEntries); got != 1 {
+		t.Fatalf("errorEntries len = %d, want 1", got)
+	}
+	if r.errorEntries[0].typeName != "NotFound" {
+		t.Errorf("typeName = %q, want NotFound", r.errorEntries[0].typeName)
+	}
+	if r.errorEntries[0].isDefault {
+		t.Errorf("isDefault = true, want false for concrete entry")
+	}
+	if r.errorEntries[0].matcher == nil {
+		t.Errorf("matcher = nil, want non-nil for concrete entry")
+	}
+	if r.errorEntries[0].formatter == nil {
+		t.Errorf("formatter = nil, want non-nil")
+	}
+}
+
+func TestCompileRoutesDefaultErrorEntry(t *testing.T) {
+	src := `errors /users/* ->
+  default defaultJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorFormatters := map[string]ErrorFormatterFunc{"defaultJSON": noopErrorFormatter}
+
+	tbl, entries := compileRoutes(resolved, resolvers, formatters, errorFormatters, nil)
+	if len(entries) != 0 {
+		t.Fatalf("compileRoutes returned entries: %v", entries)
+	}
+	r := tbl.byMethod["GET"][0]
+	if got := len(r.errorEntries); got != 1 {
+		t.Fatalf("errorEntries len = %d, want 1", got)
+	}
+	if !r.errorEntries[0].isDefault {
+		t.Errorf("isDefault = false, want true for default entry")
+	}
+	if r.errorEntries[0].matcher != nil {
+		t.Errorf("matcher = non-nil, want nil for default entry")
+	}
+	if r.errorEntries[0].formatter == nil {
+		t.Errorf("formatter = nil, want non-nil")
+	}
+}
+
+func TestCompileRoutesMixedErrorEntriesPreserveOrder(t *testing.T) {
+	// Spec 002 documents most-specific-first ordering. The runtime
+	// preserves order verbatim from pipeline.Handler.ErrorMap; this
+	// test pins index-by-index equality.
+	src := `errors /users/* ->
+  NotFound notFoundJSON
+  Validation validationJSON
+  default defaultJSON
+
+GET /users/:id ->
+  resolve user = db.users(:id)
+  format user.show with user
+`
+	resolved := mustElaborate(t, src)
+	resolvers := map[string]ResolverFunc{"db.users": noopResolver}
+	formatters := map[string]FormatterFunc{"user.show": noopFormatter}
+	errorFormatters := map[string]ErrorFormatterFunc{
+		"notFoundJSON":   noopErrorFormatter,
+		"validationJSON": noopErrorFormatter,
+		"defaultJSON":    noopErrorFormatter,
+	}
+	errorTypes := map[string]func(error) bool{
+		"NotFound":   func(error) bool { return false },
+		"Validation": func(error) bool { return false },
+	}
+
+	tbl, entries := compileRoutes(resolved, resolvers, formatters, errorFormatters, errorTypes)
+	if len(entries) != 0 {
+		t.Fatalf("compileRoutes returned entries: %v", entries)
+	}
+	r := tbl.byMethod["GET"][0]
+	if got := len(r.errorEntries); got != 3 {
+		t.Fatalf("errorEntries len = %d, want 3", got)
+	}
+	wantNames := []string{"NotFound", "Validation", "default"}
+	wantIsDefault := []bool{false, false, true}
+	for i, want := range wantNames {
+		if got := r.errorEntries[i].typeName; got != want {
+			t.Errorf("entry[%d].typeName = %q, want %q", i, got, want)
+		}
+		if got := r.errorEntries[i].isDefault; got != wantIsDefault[i] {
+			t.Errorf("entry[%d].isDefault = %v, want %v", i, got, wantIsDefault[i])
+		}
 	}
 }
