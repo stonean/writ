@@ -1448,5 +1448,6 @@ Writ follows a spec-driven development pipeline. New features are defined as spe
 | 002 | Pipeline Elaboration | done | [spec](specs/002-pipeline-elaboration/spec.md) |
 | 003 | Runtime Skeleton + HTTP Dispatch | done | [spec](specs/003-runtime-skeleton/spec.md) |
 | 004 | Errors Block Runtime | done | [spec](specs/004-errors-block/spec.md) |
+| 005 | Code Generation | draft | [spec](specs/005-code-generation/spec.md) |
 
 The Writ surface above is the design target. See [`specs/inbox.md`](specs/inbox.md) for the backlog of feature areas waiting to be specced.
