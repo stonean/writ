@@ -1,7 +1,10 @@
-# 001 — DSL Parser
+---
+status: done
+dependencies: []
+tags: []
+---
 
-**Status:** done
-**Dependencies:** none
+# 001 — DSL Parser
 
 The DSL parser turns one or more `.writ` files into a single in-memory representation — an Abstract Syntax Tree (AST) — that downstream features (the pipeline runtime, code generation, the `writ show` and `writ routes` CLIs) consume. The parser is purely syntactic: it recognizes the constructs documented in the README's *DSL Syntax* section, flattens includes, and reports structured errors. It does no semantic checking — name registration, field references, dependency cycles, and pairing rules are all the responsibility of later stages.
 

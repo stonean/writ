@@ -1,16 +1,22 @@
-# Create
+---
+description: Spawn a new project from this one, copying specs, commands, and config.
+argument-hint: "[project slug]"
+---
 
-Scaffold a new project from this one. Copies specs, commands, configuration, and — if present — implementation code to a new directory with the new project name.
+# Spawn
+
+Spawn a new project from this one. Copies specs, commands, configuration, and — if present — implementation code to a new directory with the new project name.
 
 ## Purpose
 
-A spec project defines the tech stack, architecture, and foundational features for a product. When the spec project also contains implementation code, the created project inherits a working foundation and can jump straight to business-specific features. It is the greenfield counterpart to `govern`.
+A spec project defines the tech stack, architecture, and foundational features for a product. When the spec project also contains implementation code, the spawned project inherits a working foundation and can jump straight to business-specific features. This is the greenfield counterpart to `/govern` (which adopts governance into an existing project).
 
 ## Scope Boundaries
 
 - This command copies files and renames references. Do NOT generate new code, specs, or plans.
 - Read only what is needed: the source project's file structure, `AGENTS.md` (for display name detection), and `initialize.md` (if present, for additional inputs and copy guidance). Do NOT read spec contents, source code logic, or plan details.
 - All operations target the new project directory. Do NOT modify the source project.
+- Reference: no constitution sections apply — this is a one-shot scaffolding command that operates on file copies, not governance artifacts.
 
 ## Inputs
 
@@ -64,7 +70,7 @@ Copy the entire `specs/` directory (including all feature specs, templates, syst
 
 Copy all implementation directories and files that exist in the source project. Skip any that do not exist — a spec-only project will have none of these.
 
-Copy any directories and files at the project root that are clearly part of the application. Do **not** copy `.git/`, `.claude/`, or IDE-specific settings. The initialize command (if present) may list specific directories and files to copy — follow its guidance.
+Copy any directories and files at the project root that are clearly part of the application. Do **not** copy `.git/`, the agent's config directory (e.g. `.claude/`, `.augment/`), or IDE-specific settings. The initialize command (if present) may list specific directories and files to copy — follow its guidance.
 
 ### 5. Copy slash commands
 
@@ -80,11 +86,11 @@ Create `.claude/{slug}-session.json` with empty content `{}`.
 
 ### 8. Create settings
 
-Create `.claude/settings.local.json` with default content `{"permissions":{"allow":[],"deny":[]}}`. Do **not** copy from the source project — it contains absolute paths specific to the source.
+Create `.claude/settings.local.json` with default content matching the agent's settings format (e.g., `{"permissions":{"allow":[],"deny":[]}}` for Claude Code, `{"toolPermissions":[]}` for Auggie). Do **not** copy from the source project — it contains absolute paths specific to the source.
 
 ### 9. Rename project references
 
-The source project name is derived from the command prefix (e.g., if this command is `/{source}:create` then the source name is `{source}`).
+The source project name is derived from the command prefix (e.g., if this command is `/{source}:spawn` then the source name is `{source}`).
 
 Replace the source project name with the new slug **in all case variants**, and replace the source display name with the new display name:
 
@@ -133,14 +139,14 @@ After scaffolding is complete, display:
 
 ---
 
-**Project created successfully at `{path}/{slug}`.**
+**Project spawned successfully at `{path}/{slug}`.**
 
-Created from `{source}`.
+Spawned from `{source}`.
 
 Next steps:
 
 1. Start a new Claude Code session in the project directory: `cd {path}/{slug}`
-2. Run `/{slug}:setup` to configure permissions
+2. Run `/{slug}:configure` to configure permissions
 3. Review `AGENTS.md` and update any project-specific details
 4. Run `/{slug}:status` to see all features and their progress
 5. Add your first business feature: `/{slug}:specify`
@@ -151,5 +157,5 @@ Next steps:
 
 - Generate code — it copies the source project as-is, including any implementation
 - Make any git commits — the user decides when to commit
-- Run `/{slug}:setup` — that runs in the new project's Claude session
+- Run `/{slug}:configure` — that runs in the new project's Claude session
 - Remove or modify the source project in any way

@@ -1,7 +1,10 @@
-# 004 — Errors Block Runtime
+---
+status: done
+dependencies: [001-dsl-parser, 002-pipeline-elaboration, 003-runtime-skeleton]
+tags: []
+---
 
-**Status:** done
-**Dependencies:** 001-dsl-parser, 002-pipeline-elaboration, 003-runtime-skeleton
+# 004 — Errors Block Runtime
 
 The errors block runtime turns a returned Go error into a properly-formatted HTTP response by consuming the effective error map already produced by spec 002. The DSL syntax (`errors /pattern -> Type formatter`) is parsed by spec 001 and resolved into a per-handler `ErrorMap` by spec 002; this feature wires that map into the runtime's request path so a `NotFound` returned from a resolver renders through `notFoundJSON` instead of falling through to the runtime's generic 500.
 

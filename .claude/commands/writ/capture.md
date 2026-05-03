@@ -1,3 +1,8 @@
+---
+description: Create a skeleton spec for an existing feature in a brownfield project.
+argument-hint: "[feature description]"
+---
+
 # Capture
 
 Create a skeleton spec for an existing feature in a brownfield project.
@@ -16,9 +21,9 @@ If the constitution has not been loaded in this session (e.g., `/writ:target` ha
 
 - This command creates spec artifacts only. Do NOT read or write source code, test files, or implementation files.
 - Do NOT read existing code to infer behavior — the spec captures intended behavior as understood by the user.
-- Do NOT create scenarios — the user runs `/writ:scenario` separately to decompose.
+- Do NOT create scenarios — the user runs `/writ:elaborate` separately to decompose.
 - Read only what is needed: existing spec directory names (for numbering), the spec template, and `README.md` (for the feature table). Do NOT read other specs' contents unless checking for naming conflicts.
-- Reference: §spec-phase, §spec-requirements, §brownfield-process, §numbering.
+- Reference: §spec-phase, §spec-requirements, §brownfield-process, §numbering, §text-first-artifacts.
 
 ## Instructions
 
@@ -35,11 +40,12 @@ If the constitution has not been loaded in this session (e.g., `/writ:target` ha
 6. Copy `specs/templates/spec.md` into the directory as `spec.md`.
 
 7. Fill in the spec from the user's description:
-   - Set status to `draft`.
-   - Populate sections with whatever behavior is known — sparse acceptance criteria are expected and valid.
+   - The frontmatter `status` field starts as `draft` (template default).
+   - Leave frontmatter `dependencies` as `[]`; add entries to the list if dependencies on other specs are apparent.
+   - Leave frontmatter `tags` as `[]`; brownfield capture is intentionally sparse, and tags can be backfilled organically as the spec gains precision through `/writ:clarify`.
+   - Populate body sections with whatever behavior is known — sparse acceptance criteria are expected and valid.
    - If no acceptance criteria are known, leave the Acceptance Criteria section empty (with a comment noting criteria will emerge from real work).
    - List any open questions the user mentioned.
-   - List dependencies on other specs if apparent.
    - Present the draft for user review before writing.
 
 8. Add the new feature to the table in `README.md`.
@@ -54,6 +60,6 @@ If the constitution has not been loaded in this session (e.g., `/writ:target` ha
     >
     > What to do next — depends on why you captured this:
     >
-    > - `/writ:scenario` — capture a bug or edge case
+    > - `/writ:elaborate` — capture a bug or edge case
     > - `/writ:clarify` — flesh out the spec
     > - Leave at `draft` and come back when real work arrives

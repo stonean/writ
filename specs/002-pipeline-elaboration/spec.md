@@ -1,7 +1,10 @@
-# 002 — Pipeline Elaboration
+---
+status: done
+dependencies: [001-dsl-parser]
+tags: []
+---
 
-**Status:** done
-**Dependencies:** 001-dsl-parser
+# 002 — Pipeline Elaboration
 
 Pipeline elaboration is the second layer of meaning on top of the syntactic AST. It walks a parsed program and produces a *resolved structure*: for each handler, the effective pipeline with system-block defaults applied, group-level overrides applied, and handler-level overrides applied — with `none` opt-outs honored, the matching `errors` block chosen, and the source span of every effective stage preserved.
 

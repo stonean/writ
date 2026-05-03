@@ -10,7 +10,7 @@ These are evaluation criteria, not implementation instructions. Use them to iden
 
 ### Technology
 
-- **Secure:** protect sensitive data through industry standards and best practices
+- **Secure:** protect sensitive data through industry standards and best practices. See `specs/security-backend.md` and `specs/security-frontend.md` for enforceable rules.
 - **Scalable:** design and implement to be dynamically scaled
 - **Learnable:** fast onboarding through clear patterns, documentation, and accessible codebase design
 - **Reliable:** graceful degradation and automatic recovery when components fail
@@ -30,6 +30,12 @@ These are evaluation criteria, not implementation instructions. Use them to iden
 - **Observable:** clear, real-time visibility into product and service performance
 - **Compliant:** meet regulatory, legal, and industry requirements
 - **Cost-conscious:** optimize cost across building, operating, and scaling products and services
+
+<!-- §cost-levers -->
+
+### Cost levers
+
+Per-task token tracking and budget ceilings require a runtime governance does not have — that work belongs to the AI platform. Governance contributes by offering cost-aware patterns the user can opt into. The current levers: the [Lightweight Track](#lightweight-track) skips the plan phase for small features; the optional `[simple]` marker on tasks signals to the agent (and the user) that a trivial task should be routed to a cheaper model per the adopter's platform mapping; the stuck-detection step in `/{project}:implement` catches runaway loops before they compound spend; default-off autonomy keeps the human in the loop unless `--auto` is explicitly passed. For runtime cost controls, point the adopter at the platform's tooling — Claude Code's `/cost`, the Anthropic usage dashboard, Cursor's request limits, and equivalents.
 
 <!-- §pipeline -->
 
@@ -83,7 +89,26 @@ specs/
 | `in-progress` | Implementation has started |
 | `done` | All acceptance criteria verified, code merged |
 
-A spec advances forward through these states. Moving backward (e.g., `planned` → `clarified`) is allowed when new questions surface during implementation. A `done` spec is reopened by adding a new scenario — the scenario captures the change, and the spec status moves to `in-progress`. The spec then follows the normal pipeline from that point. This avoids spec proliferation; scenarios evolve the existing spec rather than spawning a new one.
+```text
+draft ──/clarify──▶ clarified ──/plan──▶ planned ──/implement──▶ in-progress ──/implement──▶ done
+```
+
+Forward edges only — `/clarify` raises status to `clarified`, `/plan` to `planned`, `/implement` to `in-progress` and then to `done`. Two back-edges exist:
+
+- **Backward via new questions** — `clarified` / `planned` / `in-progress` → `draft` when `/ask` records a new open question; the next `/clarify` resolves the question and the spec advances forward again. `draft` is the only status that tolerates open questions, so it is the destination; `/ask` performs the status mutation in the same write that records the question.
+- **Backward via new scenario** — `done` → `in-progress` when `/elaborate` adds a scenario. The scenario's task is implemented and the spec returns to `done`.
+
+This avoids spec proliferation; scenarios evolve the existing spec rather than spawning a new one.
+
+#### The three cycles
+
+Every spec moves through one of three cycles depending on where it starts and whether new behavior surfaces:
+
+1. **Greenfield** — `/specify` → `/clarify` → `/plan` → `/implement` → `done`. A new feature designed from scratch.
+2. **Brownfield** — `/capture` (sketch spec) → real work touches the area → `/elaborate` to add a scenario, or `/clarify` to resolve open questions, or both → `/implement` → `done`. Existing reality being absorbed into specs incrementally.
+3. **Reopen** — a `done` spec is revisited because a bug, edge case, or change request surfaces. `/elaborate` adds a scenario, the spec moves back to `in-progress`, and the next pipeline command resumes from there.
+
+All three converge on the same pipeline; what differs is where the spec enters and how precision accumulates.
 
 <!-- §plan-phase -->
 
@@ -254,13 +279,13 @@ Promotion is a user decision, not automated. The framework provides the pattern;
 
 ### Brownfield Inbox
 
-For projects adopting governance incrementally, a `specs/inbox.md` file serves as a temporary inbox for known issues not yet assigned to a feature spec.
+For projects adopting governance incrementally, a `specs/inbox.md` file serves as a temporary inbox for known issues not yet assigned to a feature spec. Items are recorded with `/log` and groomed into their proper home with `/groom`.
 
 Inbox rules:
 
 - Do not frontfill bugs that are not being actively worked on
 - Write specs for areas being actively touched — let adoption spread naturally
-- As specs are written, items migrate from the inbox into their proper home
+- As specs are written, `/groom` migrates items from the inbox into their proper home
 - The goal is for `inbox.md` to eventually be empty and deleted
 
 <!-- §brownfield-process -->
@@ -282,7 +307,131 @@ Over time the spec converges on a complete description of the feature — not fr
 
 #### Inbox integration
 
-When an inbox item does not map to any existing spec, `/inbox` directs the user to run `/capture` to initialize a spec first, then return to process the item. The commands stay decoupled — `/inbox` processes items, `/capture` creates specs.
+When a `/groom` pass encounters an item that does not map to any existing spec, `/groom` directs the user to run `/capture` to initialize a spec first, then return to process the item. The commands stay decoupled — `/log` records, `/groom` routes, `/capture` creates specs.
+
+<!-- §text-first-artifacts -->
+
+## Text-First Artifacts
+
+Governance treats every artifact — constitution, specs, plans, tasks, scenarios, rules — as plain markdown the agent can edit with `Edit`. This is load-bearing: the agent's write path stays simple, PRs review glanceably, merge conflicts stay rare and human-resolvable, and adopting governance requires no bootstrap tooling beyond the AI agent itself.
+
+### Principles
+
+- All governance artifacts are markdown by default. The agent reads and writes them with the same `Edit` flow used for code.
+- Structured metadata lives in YAML frontmatter at the top of each markdown file; the document body remains markdown prose.
+- Cross-artifact references use standard relative markdown links (`[label](../path.md)`), not wiki-links — this keeps PRs reviewable on GitHub and viewers like Quartz/Obsidian still resolve them.
+- Source-of-truth artifacts are markdown. Structured derived views are regenerated from canonical sources and never become the canonical record.
+- **Non-markdown derived views** (SQLite caches, JSON indexes, generated graph data, binary artifacts) MUST be gitignored and regenerated on demand by their consumers.
+- **Markdown derived views** (e.g., a per-spec `code-locations.md`) MAY be committed when their diffs are valuable to humans — for PR review, onboarding, refactoring impact analysis, or session-resumption context for the agent. Adopters MAY gitignore a particular markdown derived view if they prefer; commit is permitted, not required.
+- Exceptions to text-first source-of-truth require an explicit constitutional amendment with stated rationale.
+
+### Frontmatter Schema
+
+The frontmatter schema applies to **spec files** (`spec.md`, `spec-and-plan.md`) and **scenario files** (`scenarios/{slug}.md`). Other governance artifacts (`system.md`, `errors.md`, `events.md`, `inbox.md`, plan files, tasks files, rule files, README files) MAY include frontmatter when a specific consumer benefits, but are not required to.
+
+#### Spec files
+
+| Field | Required | Type | Allowed values | Description |
+| --- | --- | --- | --- | --- |
+| `status` | yes | string | `draft`, `clarified`, `planned`, `in-progress`, `done` | Spec lifecycle state |
+| `dependencies` | yes | list of strings | spec slugs (e.g., `002-events`); empty list permitted | Specs this feature depends on |
+| `tags` | no | list of strings | free-form; see starter vocabulary below | Cross-cutting categories used by graph-view consumers |
+
+#### Scenario files
+
+| Field | Required | Type | Allowed values | Description |
+| --- | --- | --- | --- | --- |
+| `spec-ref` | yes | string | parent spec ref, conventionally `"{NNN-feature-name} — {Section}"` (quoted because the value commonly contains an em-dash and slash) | Identifies the parent spec and section the scenario elaborates |
+| `tags` | no | list of strings | free-form | Scenario-level cross-cutting tags |
+
+#### Open-schema rule
+
+Additional fields beyond those listed above are permitted and ignored by uninterested consumers. Examples adopters or future governance work might add: `owner`, `target_release`, `created_at`, `description`, `aliases`. The `spec-and-plan.md` template uses the open-schema rule to carry `track: lightweight` — a human-readable marker, not a pipeline-consumed field. Consumers MUST NOT error on the presence of unknown fields. `/gov:validate` reports unknown fields as informational findings (not errors).
+
+### Validation Severity
+
+`/gov:validate` checks frontmatter against this schema with the following severity:
+
+- **Hard fail** — frontmatter block missing on a spec or scenario file; frontmatter YAML malformed; `status` missing or not in the allowed set; `dependencies` missing or not a list; `spec-ref` missing on a scenario.
+- **Advisory** — `tags` missing or empty; existing checkbox/cross-reference checks.
+- **Informational** — unknown fields present.
+
+Hard fails block the validation pass. Advisory and informational findings are reported but do not block.
+
+For non-frontmatter checks (spec integrity, artifact completeness, plan/task consistency, dependencies, security rules), `/gov:validate` adds a fourth tier — **Blocking** — between Hard fail and Advisory. Blocking findings are structural or content issues that must be fixed before the next pipeline gate fires (e.g., missing `plan.md` on a `planned` spec, an unknown rule ID referenced in a spec). Hard fail and Blocking both prevent pipeline advancement; the distinction is that Hard fail says "the spec file itself is malformed," while Blocking says "the artifact set is incomplete or inconsistent." See `framework/commands/validate.md` for the full per-check severity assignment.
+
+### Starter Tag Vocabulary
+
+Published as guidance, not enforcement. Adopters and future specs MAY introduce new tags as needed; `/gov:specify` surfaces existing tags from sibling specs as autocomplete to drive convergence by reuse rather than ceremony.
+
+| Tag | Suggested use |
+| --- | --- |
+| `cli` | Specs about slash commands or command-line interactions |
+| `commands` | Specs that introduce, rename, or significantly change slash commands |
+| `bootstrap` | Specs about adopting governance, project scaffolding, or initialization |
+| `process` | Specs about workflow, lifecycle, or pipeline behavior |
+| `templates` | Specs about template files (spec, plan, scenario, project-readme, etc.) |
+| `security` | Specs about security rules, authentication, authorization |
+| `agent` | Specs about AI-agent behavior, capabilities, or coordination |
+| `format` | Specs about artifact formats, schemas, or serialization conventions |
+| `pipeline` | Specs about the spec → plan → tasks → implement flow |
+| `migration` | Specs that convert existing artifacts to a new format or convention |
+| `scenarios` | Specs about scenario semantics, scenario targeting, or scenario tooling |
+| `brownfield` | Specs about brownfield adoption, capture, inbox grooming, or incremental spec growth |
+
+<!-- §drift-prevention -->
+
+## Drift Prevention
+
+These principles keep facts consistent as the framework evolves. They apply both to governance itself and to projects that adopt it. Drift is a class of bug; preventing it is part of the framework's design, not an afterthought.
+
+### Canonical sources
+
+For every kind of fact described in multiple places, one location is authoritative. Other documents that describe the fact MUST reference the canonical source rather than restate it.
+
+| Fact | Canonical source |
+| --- | --- |
+| Spec lifecycle states and back-edges | `framework/constitution.md` §spec-lifecycle |
+| Pipeline command behavior | each command's source under `framework/commands/*.md` (or `framework/bootstrap/configure/{key}.md`) |
+| Frontmatter schema for specs and scenarios | `framework/constitution.md` §text-first-artifacts |
+| Validation severity tiers | `framework/constitution.md` §text-first-artifacts (Validation Severity subsection) |
+| Workflow registry | `framework/workflows/registry.json` |
+| Per-agent permission set | `framework/bootstrap/configure/{key}.md` |
+| Constitution section anchors | `<!-- §<anchor> -->` markers in `framework/constitution.md` |
+| Command frontmatter (description, argument-hint) | each command's own frontmatter block |
+
+When adding a new kind of fact that may be referenced from multiple documents, name its canonical source explicitly here.
+
+### Cross-document references
+
+When document B describes content authored in document A, B includes a back-link to A — relative markdown link, anchor reference (`§anchor`), or section name. Two consequences follow:
+
+- Changing A includes auditing every back-link to A. The audit is structured wherever it can be machine-checked (anchor resolution, help-table descriptions, registry-frontmatter equivalence), and a manual sweep otherwise.
+- Adding a fact that conceptually belongs in A but landing it in B is drift. Either move the fact to A and back-link, or extend A's scope explicitly.
+
+### Template-rule alignment
+
+Every blocking check in `/{project}:validate` has a corresponding scaffolding element in the template that produces a passing artifact by default. The contract runs in both directions:
+
+- Adding a new blocking check requires a template update so a freshly-copied artifact passes the check without manual editing.
+- Adding template structure requires a corresponding rule (validate check, constitution rule, or both). Sections that don't trace back to a rule are dead weight.
+
+Templates and validate evolve together. A diff that touches one without the other is incomplete.
+
+### Manifest discipline
+
+When multiple commands distribute or reference the same set of files (e.g., `/govern` and `/{project}:init` both scaffold a project; `/{project}:configure` and the bootstrap install both apply permission sets), the file list lives in one place:
+
+- Either as a shared section the commands include by reference, or
+- As a registry both commands read.
+
+Two commands that copy-paste the same manifest into their own bodies are guaranteed to drift over time. Consolidate or accept that drift is the rule, not the exception.
+
+### Done specs are frozen archaeology
+
+`done` specs reflect the world at merge time. The framework will continue to evolve; done specs will not be rewritten to match. Drift between a done spec's body and the current framework is expected — handle it with **signposts at the top of the spec**, not by rewriting the body. Plan and tasks files in done-spec directories follow the same rule.
+
+A signpost names what changed and points readers at the current source of truth. It does not edit history.
 
 <!-- §pipeline-boundaries -->
 
@@ -293,6 +442,12 @@ When an inbox item does not map to any existing spec, `/inbox` directs the user 
 - Never skip phases — each phase produces artifacts the next phase consumes
 - Never transition a spec to the next status without explicit user approval — present the work done and wait for the user to confirm before updating the status field
 - Specs and plans are living documents — update them when decisions change, but don't backtrack silently
+
+<!-- §concurrent-features -->
+
+### Concurrent Features
+
+The session state file (`{cli-config-dir}/{project}-session.json`) holds a single target by design. The pipeline is serial within a feature, and concurrent work on independent features uses two independent sessions in two terminals — not multi-target session state. Isolation is provided by the platform layer: `git worktree` keeps the working trees separate, and AI-agent platforms typically expose isolation primitives (Claude Code's `isolation: "worktree"` agent parameter, Cursor's worktree integration, etc.). Reach for those rather than asking governance to track multiple targets at once.
 
 <!-- §cross-spec-impact -->
 

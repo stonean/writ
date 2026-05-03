@@ -1,3 +1,8 @@
+---
+description: Set the working feature (and optionally scenario) for this session.
+argument-hint: "[feature[/scenario]]"
+---
+
 # Target
 
 Set the working feature (and optionally scenario) for this session.
@@ -5,6 +10,13 @@ Set the working feature (and optionally scenario) for this session.
 ## Purpose
 
 Establishes which feature spec all subsequent `/writ:*` commands operate on. Optionally targets a specific scenario within the feature for scenario-aware commands. Must be run before any pipeline command. Remains active for the session unless changed by running `/writ:target` again.
+
+## Scope Boundaries
+
+- Read `constitution.md` once per session and the targeted feature's `spec.md` (or `spec-and-plan.md`) frontmatter and open-question count. Read the targeted scenario file only when one is specified.
+- Do NOT read plan files, tasks, source code, test files, or unrelated specs' bodies.
+- Do NOT modify any spec, plan, scenario, or source file. The only file written is the session JSON. Status transitions belong to the pipeline commands (`/writ:clarify`, `/writ:plan`, `/writ:implement`) and to `/writ:elaborate` (the documented `done → in-progress` back-edge).
+- Reference: §spec-lifecycle, §scenarios, §concurrent-features, §text-first-artifacts.
 
 ## Instructions
 
@@ -34,15 +46,15 @@ If `$ARGUMENTS` is empty or contains only whitespace (note: `0`, `00`, `000`, or
 
 3. Read `constitution.md` to load governance rules for the session. Subsequent commands reference specific §sections from this read — do not re-read the constitution unless the session is new.
 
-4. Determine which spec file exists: `spec.md` or `spec-and-plan.md`. Read it and extract status, dependencies, and open question count.
+4. Determine which spec file exists: `spec.md` or `spec-and-plan.md`. Parse the YAML frontmatter block at the top of the file and extract `status`, `dependencies`, and `tags`. Count open questions in the body's `## Open Questions` section. Count entries the same way `/writ:clarify` does: top-level list items or `**Bold-prefix**`-style headings; treat the section as having zero entries when it is missing, empty, or contains only a placeholder line such as `*None — all resolved.*`.
 
 5. Check which artifacts exist: `spec.md` (or `spec-and-plan.md`), `plan.md`, `tasks.md`, `data-model.md`.
 
 6. **Resolve scenario (if provided):**
-   - Check if `specs/{feature}/scenarios/` directory exists. If not, report: "No scenarios exist for this feature. Run `/writ:scenario` to create one."
+   - Check if `specs/{feature}/scenarios/` directory exists. If not, report: "No scenarios exist for this feature. Run `/writ:elaborate` to create one."
    - List `.md` files in `specs/{feature}/scenarios/`.
    - Match `{scenario-slug}` against filenames (without `.md` extension). If no match, list available scenarios and ask the user to choose.
-   - Read the scenario file to extract spec-ref and context summary.
+   - Read the scenario file: extract `spec-ref` from the YAML frontmatter and capture the context summary from the body's `## Context` section.
 
 7. Write `.claude/writ-session.json`:
 
@@ -76,9 +88,10 @@ If `$ARGUMENTS` is empty or contains only whitespace (note: `0`, `00`, `000`, or
    - Artifacts present
    - Dependency status
    - Open question count
-   - Next pipeline step (based on status):
+   - Next pipeline step (based on status and open-question count):
+     - **Recovery state — `(status ∈ {clarified, planned, in-progress}, open-question count ≥ 1)`** → `/writ:clarify` (the recovery path will surface the inconsistency before any forward action). This state usually arises from a manual frontmatter edit; the normal back-edge via `/writ:ask` keeps spec status and open-question presence in sync.
      - `draft` → `/writ:clarify`
      - `clarified` → `/writ:plan`
      - `planned` → `/writ:implement`
      - `in-progress` → `/writ:implement`
-     - `done` → ask the user if they want to reopen this spec. If yes, update the spec status to `in-progress` and suggest `/writ:scenario` to capture the change. If no, confirm the spec is complete.
+     - `done` → confirm the spec is complete. To reopen it, run `/writ:elaborate` to add a scenario — that command performs the documented `done → in-progress` back-edge.

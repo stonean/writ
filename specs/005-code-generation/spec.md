@@ -1,7 +1,10 @@
-# 005 — Code Generation
+---
+status: planned
+dependencies: [001-dsl-parser, 002-pipeline-elaboration, 003-runtime-skeleton, 004-errors-block]
+tags: []
+---
 
-**Status:** planned
-**Dependencies:** 001-dsl-parser, 002-pipeline-elaboration, 003-runtime-skeleton, 004-errors-block
+# 005 — Code Generation
 
 The code generator turns parsed `.writ` programs into typed Go glue so consumer code interacts with handlers, resolvers, formatters, and error types through compile-time-checked identifiers instead of runtime string lookups and `any` casts. It is the long-term answer to the runtime's deferred typing decisions and the prerequisite for replacing reflection-using paths (the spec-004 `errors.As` matcher; the spec-003 `Params` and `Results` `any` accessors) with code that does not call into the standard library's reflection machinery at request time.
 

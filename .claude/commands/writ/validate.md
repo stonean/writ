@@ -1,10 +1,15 @@
+---
+description: Check a feature's artifacts for consistency and cross-spec alignment.
+argument-hint: "[--fix] [--all] [feature]"
+---
+
 # Validate
 
 Check a feature's artifacts for consistency and cross-spec alignment.
 
 ## Purpose
 
-Audit a feature's spec, plan, tasks, and data model for consistency. By default, reports issues without modifying files. With `--fix`, automatically corrects fixable checkbox state mismatches. Use this to catch problems before advancing to the next pipeline phase.
+Audit a feature's spec, plan, tasks, and data model for consistency. By default, reports issues without modifying files. With `--fix`, automatically corrects fixable checkbox state mismatches. Use this to catch problems before the next pipeline gate fires.
 
 ## Context
 
@@ -22,20 +27,48 @@ If `--all` is not present, use the feature identifier if provided, otherwise fal
 
 - By default, this is a read-only command. Do NOT modify any files.
 - In fix mode (`--fix`), modify only checkbox state (`- [ ]` → `- [x]`) in spec and task files where the fix is mechanically safe (see Fix Mode section below). Do not modify any other content.
-- Read only files within the target feature's directory and the cross-spec files needed for reference checks (`specs/system.md`, `specs/events.md`, `specs/errors.md`, dependency spec files). Do NOT read source code or test files.
-- Reference: §spec-requirements, §plan-phase, §tasks-phase, §readiness-check, §scenarios (constitution loaded by `/writ:target` — do not re-read).
+- Read only files within the target feature's directory, the cross-spec files needed for reference checks (`specs/system.md`, `specs/events.md`, `specs/errors.md`, dependency spec files), and the project's installed command-source frontmatter for the project-level consistency section below (`.claude/commands/writ/*.md` frontmatter only, plus `help.md` body for the table comparison). Do NOT read source code or test files.
+- Reference: §spec-requirements, §plan-phase, §tasks-phase, §readiness-check, §scenarios, §cross-spec-impact, §text-first-artifacts, §markdown-standards, §drift-prevention (constitution loaded by `/writ:target` — do not re-read).
 
 ## Instructions
 
-Read every file in `specs/{feature}/` and run the following checks. Each check is classified as **blocking** (must fix before advancing to the next pipeline phase) or **advisory** (should fix but does not block advancement).
+Read every file in `specs/{feature}/` and run the following checks. Each check is classified by severity:
+
+- **Hard fail (blocking)** — required-field violations and malformed frontmatter. The spec is not valid until these are fixed; pipeline advancement is blocked.
+- **Blocking** — structural or content issues that must be fixed before the next pipeline gate fires.
+- **Advisory** — issues that should be fixed but do not block advancement.
+- **Informational** — observations that may warrant attention but are neither errors nor warnings.
+
+### Frontmatter schema (hard fail)
+
+For each spec file (`spec.md`, `spec-and-plan.md`):
+
+- [ ] A YAML frontmatter block exists at the top of the file (delimited by `---` lines).
+- [ ] The frontmatter parses as valid YAML.
+- [ ] The `status` field is present and one of: `draft`, `clarified`, `planned`, `in-progress`, `done`.
+- [ ] The `dependencies` field is present and is a list (empty list permitted).
+
+For each scenario file (`scenarios/{slug}.md`):
+
+- [ ] A YAML frontmatter block exists at the top of the file.
+- [ ] The frontmatter parses as valid YAML.
+- [ ] The `spec-ref` field is present and non-empty.
+
+Reference: the schema is canonically declared in `framework/constitution.md` §text-first-artifacts.
+
+### Frontmatter schema (advisory)
+
+- [ ] Spec files have a non-empty `tags` field. Empty or missing `tags` is reported as an advisory finding ("Tags help cross-cutting graph views; consider adding some.") but does not block.
+
+### Frontmatter schema (informational)
+
+- [ ] Unknown fields beyond the declared schema are permitted and reported as informational findings (no action required).
 
 ### Spec integrity (blocking)
 
-- [ ] Status field is present and valid (draft, clarified, planned, in-progress, done)
-- [ ] Dependencies field is present
 - [ ] Acceptance criteria section exists with at least one checkbox item
 - [ ] No placeholder or empty acceptance criteria
-- [ ] Open questions consistent with status (`clarified` or later must have none)
+- [ ] Open questions consistent with status (`clarified` or later must have none). When this check fails — a spec at `clarified` / `planned` / `in-progress` with one or more open questions in the body — the spec is in the recovery state defined by spec 014. Suggested fix: run `/writ:clarify` (its recovery path will revert status to `draft` and walk the questions), or `/writ:ask` on a fresh question (which performs the back-edge automatically).
 - [ ] No implementation code blocks (function signatures, package paths, language-specific snippets) in the spec — those belong in plan.md. Format examples, directory structures, and user-facing commands are acceptable when they define behavioral contracts.
 
 ### Artifact completeness (blocking)
@@ -59,14 +92,14 @@ Read every file in `specs/{feature}/` and run the following checks. Each check i
 
 ### Scenario consistency (advisory)
 
-- [ ] Every scenario file has a spec-ref, Context, and Behavior section
+- [ ] Every scenario file has Context and Behavior sections (frontmatter `spec-ref` is checked under Frontmatter schema above)
 - [ ] Every scenario file in `scenarios/` has a corresponding task in `tasks.md`
 - [ ] Scenario-linked tasks in `tasks.md` are marked complete if the spec status is `done`
 
 ### Dependencies (blocking)
 
-- [ ] All listed dependencies exist as spec directories
-- [ ] Dependencies are at `clarified` or later (if this spec is `clarified` or later)
+- [ ] Every entry in this spec's frontmatter `dependencies` list exists as a spec directory under `specs/`
+- [ ] Each dependency's frontmatter `status` is at `clarified` or later (if this spec is `clarified` or later)
 
 ### Cross-spec references (advisory)
 
@@ -74,16 +107,69 @@ Read every file in `specs/{feature}/` and run the following checks. Each check i
 - [ ] Error codes follow the convention from `specs/errors.md`
 - [ ] Data model definitions do not conflict with other specs' data-model.md files
 
+### Security rules (blocking and advisory)
+
+Load `specs/security-backend.md` and `specs/security-frontend.md` if either is present in the project. Each file is independently optional — only the files that exist are loaded. The rule-file schema is canonically declared in `specs/008-security-rules/data-model.md`.
+
+**Rule file integrity** — for each present rule file:
+
+- [ ] Every rule heading is level-3 and contains only the rule ID (no surrounding text)
+- [ ] Every rule has the three required fields: a block-quoted Statement, `**Rationale:**` paragraph, and `**Verification:**` paragraph
+- [ ] Every rule's ID matches the format `{BE|FE}-{CATEGORY}-{NNN}` (zero-padded) with `CATEGORY` drawn from the data-model's per-surface set
+- [ ] No two rules in the same file share an ID
+
+If any check above fails, the affected rule file is treated as unloadable for the remainder of this validate pass — no rules from that file are applied to the per-rule check below. Emit one of:
+
+- `Malformed security rule file {path} at {location}: {reason}` — for missing required fields, ID-format violations, or malformed headings (**blocking**)
+- `Duplicate rule ID {ID} in {file}; refusing to load` — when two rules in the same file share an ID (**blocking**)
+
+**No rule files present**:
+
+- [ ] If neither `specs/security-backend.md` nor `specs/security-frontend.md` is present, emit `No security rule files found, skipping security checks` (**advisory**) and skip the per-rule and reference checks below
+
+**Per-rule check** — when at least one rule file is loaded and well-formed, iterate every loaded rule and execute its **Verification** instruction against the project's `spec.md`, `spec-and-plan.md`, `plan.md`, `scenarios/*.md`, and `specs/system.md` content:
+
+- [ ] For each MUST or MUST NOT rule whose Verification trigger fires against an artifact that does not include the required commitment, emit `{Rule ID}: {artifact path} — {one-line gap summary}` (**blocking**)
+- [ ] For each SHOULD or SHOULD NOT rule whose trigger fires, emit `{Rule ID}: {artifact path} — {one-line gap summary}` (**advisory**)
+- [ ] A rule whose Verification trigger does not fire against any artifact produces no finding (silently inert — the contextual-application property)
+
+**Rule references** — scan all project artifacts for inline rule-ID references (e.g., `BE-AUTHN-001`, `FE-XSS-002`):
+
+- [ ] If an artifact references an ID not present in any loaded rule file, emit `Spec at {path} references unknown rule {ID}` (**blocking**)
+- [ ] If an artifact references an ID that exists but is marked `DEPRECATED`, emit `Spec at {path} references deprecated rule {ID}; targeted for removal in {version}` (**advisory**)
+
+Findings produced by this section are surfaced under validate's existing severity headers in the report — blocking findings join **Blocking**, advisory findings join **Advisory**.
+
 ### Markdown lint (advisory)
 
 - [ ] All `.md` files in the feature directory pass `npx markdownlint-cli2`
 
+### Project-level consistency (advisory)
+
+These checks span the project's installed command set and constitution rather than the target feature. They catch drift in the framework files governance ships, surfaced per the Drift Prevention principles in `constitution.md` §drift-prevention. Run once per `/writ:validate` invocation regardless of which feature is targeted; with `--all`, run once before per-feature output.
+
+Read inputs:
+
+- `constitution.md` (already loaded by `/writ:target`)
+- `.claude/commands/writ/help.md`
+- The full set of `.md` files in `.claude/commands/writ/` (frontmatter only — do not read bodies for these checks)
+
+Checks:
+
+- [ ] **Help equivalence** — for each command listed in any table in `help.md`, the command's `description:` frontmatter exists and matches (modulo trailing punctuation) the one-line description in the help table. Mismatches indicate `help.md` was edited without updating the command source, or vice versa.
+- [ ] **Anchor resolution** — every `§<anchor>` reference in any installed command file (typically in "Reference: §X, §Y" Scope-Boundaries lines) resolves to a corresponding `<!-- §<anchor> -->` marker in `constitution.md`. A broken reference indicates the constitution was renamed or restructured without updating callers. Report each broken reference with the source command and the unresolved anchor.
+- [ ] **Command frontmatter completeness** — every `.md` file in the installed commands directory has a `description:` frontmatter field. Files whose body documents an `$ARGUMENTS` parameter additionally have `argument-hint:`. Report missing fields; do not check value content.
+
+These are advisory, not blocking — they signal framework drift that the project should resolve at its convenience. They do not prevent pipeline advancement on the target feature.
+
 ### Report
 
-Separate results into two sections:
+Separate results into sections by severity:
 
-1. **Blocking** — issues that must be fixed before the spec can advance. List these first.
-2. **Advisory** — issues that should be fixed but do not block advancement.
+1. **Hard fail** — required-field violations and malformed frontmatter. The spec is not valid; pipeline advancement is blocked. List these first.
+2. **Blocking** — structural or content issues that must be fixed before the next pipeline gate fires.
+3. **Advisory** — issues that should be fixed but do not block advancement.
+4. **Informational** — observations (e.g., unknown frontmatter fields) that may warrant attention but are neither errors nor warnings.
 
 For each FAIL, include: what failed, what was expected, what was found, and a suggested fix.
 
