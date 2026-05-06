@@ -15,7 +15,7 @@ Brownfield entry point. Creates a numbered feature directory with a skeleton spe
 
 This command does not require a session target — it creates a new feature. If `.claude/writ-session.json` exists, the session target will be overwritten with the new feature.
 
-If the constitution has not been loaded in this session (e.g., `/writ:target` has not been run), read `constitution.md` now to load governance rules. If the constitution was already loaded by `/writ:target`, do not re-read it.
+If the constitution has not been loaded in this session (e.g., `/writ:target` has not been run), read `constitution.md` now to load `govern` rules. If the constitution was already loaded by `/writ:target`, do not re-read it.
 
 ## Scope Boundaries
 
@@ -40,6 +40,7 @@ If the constitution has not been loaded in this session (e.g., `/writ:target` ha
 6. Copy `specs/templates/spec.md` into the directory as `spec.md`.
 
 7. Fill in the spec from the user's description:
+   - Replace the frontmatter `title` placeholder with `"{NNN-feature-name} — spec"` (e.g., `"005-authentication — spec"`). The title gives PKM tools (Obsidian graph, Quartz) a unique node label per artifact, since every feature directory contains a `spec.md`/`plan.md`/`tasks.md`.
    - The frontmatter `status` field starts as `draft` (template default).
    - Leave frontmatter `dependencies` as `[]`; add entries to the list if dependencies on other specs are apparent.
    - Leave frontmatter `tags` as `[]`; brownfield capture is intentionally sparse, and tags can be backfilled organically as the spec gains precision through `/writ:clarify`.

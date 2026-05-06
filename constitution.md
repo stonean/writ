@@ -35,7 +35,7 @@ These are evaluation criteria, not implementation instructions. Use them to iden
 
 ### Cost levers
 
-Per-task token tracking and budget ceilings require a runtime governance does not have — that work belongs to the AI platform. Governance contributes by offering cost-aware patterns the user can opt into. The current levers: the [Lightweight Track](#lightweight-track) skips the plan phase for small features; the optional `[simple]` marker on tasks signals to the agent (and the user) that a trivial task should be routed to a cheaper model per the adopter's platform mapping; the stuck-detection step in `/{project}:implement` catches runaway loops before they compound spend; default-off autonomy keeps the human in the loop unless `--auto` is explicitly passed. For runtime cost controls, point the adopter at the platform's tooling — Claude Code's `/cost`, the Anthropic usage dashboard, Cursor's request limits, and equivalents.
+Per-task token tracking and budget ceilings require a runtime `govern` does not have — that work belongs to the AI platform. `govern` contributes by offering cost-aware patterns the user can opt into. The current levers: the [Lightweight Track](#lightweight-track) skips the plan phase for small features; the optional `[simple]` marker on tasks signals to the agent (and the user) that a trivial task should be routed to a cheaper model per the adopter's platform mapping; the stuck-detection step in `/{project}:implement` catches runaway loops before they compound spend; default-off autonomy keeps the human in the loop unless `--auto` is explicitly passed. For runtime cost controls, point the adopter at the platform's tooling — Claude Code's `/cost`, the Anthropic usage dashboard, Cursor's request limits, and equivalents.
 
 <!-- §pipeline -->
 
@@ -212,17 +212,18 @@ If any of these conditions are not met, use the full pipeline.
 
 ## Bug Handling
 
-Bugs are unwritten scenarios. Rather than tracking defects in a separate system, every bug is evidence that a spec is missing, ambiguous, or violated.
+Bugs are unwritten or violated requirements. Every bug is evidence that one of the framework's three artifact tiers — rules (cross-cutting), specs (feature-wide), or scenarios (situational) — has a gap. Rather than tracking defects in a separate system, fixing a bug means making the requirement at the right tier more precise. See [§rules](#rules) for the rule tier and [§scenarios](#scenarios) for the scenario tier.
 
 ### Bug Decision Tree
 
-When a bug is reported, follow this decision tree in order:
+When a bug is reported, follow this decision tree in order. The first matching condition determines the route:
 
-1. **No spec exists for the behavior** — the bug is a gap. Write the spec first, then fix the code.
-2. **Spec exists but is ambiguous or incomplete** — the bug is a spec deficiency. Correct or enhance the spec, then fix the implementation.
-3. **Spec is clear but implementation is wrong** — add a scenario capturing the correct behavior, then fix the code.
+1. **No rule covers this cross-cutting concern** — the bug surfaces a class of behavior the framework should govern at the rules tier (perf budget, observability commitment, security control, accessibility minimum, etc.). Promote to a rule (new or amended), then fix the code.
+2. **No spec exists for the behavior** — the bug is a feature-level gap. Write the spec first, then fix the code.
+3. **Spec exists but is ambiguous or incomplete** — the bug is a spec deficiency. Correct or enhance the spec, then fix the implementation.
+4. **Spec is clear but implementation is wrong** — add a scenario capturing the correct behavior, then fix the code.
 
-In all three cases, the spec becomes more precise. The scenario or spec update is the primary artifact, not a bug report.
+In all four cases, the rule, spec, or scenario becomes more precise. The artifact update is the primary outcome, not a bug report.
 
 <!-- §scenarios -->
 
@@ -275,11 +276,65 @@ To promote: the user runs `/specify` (for new behavior) or `/capture` (for anoth
 
 Promotion is a user decision, not automated. The framework provides the pattern; the user recognizes when decomposition is needed.
 
+<!-- §rules -->
+
+### Rules
+
+A rule is an enforceable, citable requirement that applies across multiple features. Rules are the third artifact tier — alongside specs (feature-wide) and scenarios (situational), rules cover **cross-cutting** concerns the framework has opinions about regardless of which feature is being built (security, performance, concurrency, observability, accessibility, audit/compliance, data handling).
+
+Rule files ship under `specs/{rule-set}.md` and are referenced from feature specs by ID. The canonical example is `specs/security-backend.md`, whose rules (e.g., `BE-AUTHN-001`) any spec touching authentication can cite. `/{project}:validate` enforces rules — it loads each rule file, runs each rule's Verification step against feature artifacts, and reports gaps.
+
+#### Rule format (summary)
+
+Every rule has four required fields:
+
+- **ID** — a permanent identifier (e.g., `BE-AUTHN-001`) cited from feature specs.
+- **Statement** — one sentence using RFC 2119 keywords (MUST, MUST NOT, SHOULD, SHOULD NOT). MUST/MUST NOT rules are blocking; SHOULD/SHOULD NOT are advisory.
+- **Rationale** — the threat or risk the rule mitigates.
+- **Verification** — instruction to the validate agent on how to check compliance against feature artifacts.
+
+The full schema, ID stability invariants, category abbreviations, and Verification phrasing rules are canonically declared in `specs/008-security-rules/data-model.md`. New rule files follow the same schema.
+
+#### When to write a rule
+
+A new (or amended) rule is justified when **all four** of these hold:
+
+1. **Cross-cutting** — the concern applies to multiple existing or anticipated features, not a single feature's domain.
+2. **Citable** — the concern's verification can be expressed as a step a reviewer or `/{project}:validate` can check (a code-pattern check, a documentation-commitment check, or both).
+3. **Governance-recognized category** — the concern belongs to a class the framework treats as foundational (security, performance, concurrency, observability, accessibility, audit/compliance, data handling, etc.) rather than feature-specific behavior.
+4. **Generalizable wording** — the rule statement would make sense in any spec that touches the area, not only the spec that motivated it.
+
+Indicators are evaluative, not mechanical. The same judgment discipline applies to rule promotion as to scenario promotion ([§scenario-promotion](#scenario-promotion)) — the framework provides the pattern; the user recognizes when promotion is warranted.
+
+#### When a rule is not needed
+
+- The concern is **situational** (specific condition, concrete behavior) → write a scenario under the affected spec.
+- The concern is **feature-wide** (one feature, broad property) → add an acceptance criterion or section to that spec.
+- An existing rule already covers the concern → cite the existing rule from the spec rather than creating a new one.
+
+#### Lifecycle
+
+- Rule IDs are permanent. Once assigned, an ID is never renumbered, even if the rule moves within the file or is edited.
+- Rules are deprecated with a `**DEPRECATED in {version}:**` label and a removal target version, then removed only after the deprecation window has passed.
+- New rule files are introduced via their own feature spec (the same way 008 introduced `security-backend.md` and `security-frontend.md`).
+
+See `specs/008-security-rules/data-model.md` for the full ID-stability invariants and deprecation rules.
+
+#### Three tiers, selected by scope
+
+| Tier | Scope | Artifact |
+| --- | --- | --- |
+| **Rule** | Cross-cutting (applies across many features) | A rule file under `specs/{rule-set}.md`, cited by ID from the specs that depend on it |
+| **Spec / acceptance criterion** | Feature-wide (one feature, broad property) | A section or AC in the feature's `spec.md` |
+| **Scenario** | Situational (a specific condition with concrete behavior) | A file in the feature's `scenarios/` directory |
+
+Bugs route to the tier that matches the *scope* of the missing or violated requirement (see [Bug Decision Tree](#bug-decision-tree) above). A perf bug that affects every API endpoint promotes to a rule; a perf bug specific to one feature becomes an acceptance criterion; a perf bug that only manifests under a specific concurrency condition becomes a scenario.
+
 <!-- §brownfield-inbox -->
 
 ### Brownfield Inbox
 
-For projects adopting governance incrementally, a `specs/inbox.md` file serves as a temporary inbox for known issues not yet assigned to a feature spec. Items are recorded with `/log` and groomed into their proper home with `/groom`.
+For projects adopting `govern` incrementally, a `specs/inbox.md` file serves as a temporary inbox for known issues not yet assigned to a feature spec. Items are recorded with `/log` and groomed into their proper home with `/groom`.
 
 Inbox rules:
 
@@ -292,7 +347,7 @@ Inbox rules:
 
 ### Brownfield Process
 
-Brownfield projects adopt governance incrementally. The `/capture` command initializes a skeleton spec from freeform user input — no pressure to be comprehensive. Start broad; decompose through scenarios over time.
+Brownfield projects adopt `govern` incrementally. The `/capture` command initializes a skeleton spec from freeform user input — no pressure to be comprehensive. Start broad; decompose through scenarios over time.
 
 #### Capture → incremental growth → promotion
 
@@ -313,21 +368,20 @@ When a `/groom` pass encounters an item that does not map to any existing spec, 
 
 ## Text-First Artifacts
 
-Governance treats every artifact — constitution, specs, plans, tasks, scenarios, rules — as plain markdown the agent can edit with `Edit`. This is load-bearing: the agent's write path stays simple, PRs review glanceably, merge conflicts stay rare and human-resolvable, and adopting governance requires no bootstrap tooling beyond the AI agent itself.
+`govern` treats every artifact — constitution, specs, plans, tasks, scenarios, rules — as plain markdown the agent can edit with `Edit`. This is load-bearing: the agent's write path stays simple, PRs review glanceably, merge conflicts stay rare and human-resolvable, and adopting `govern` requires no bootstrap tooling beyond the AI agent itself.
 
 ### Principles
 
-- All governance artifacts are markdown by default. The agent reads and writes them with the same `Edit` flow used for code.
+- All `govern` artifacts are markdown by default. The agent reads and writes them with the same `Edit` flow used for code.
 - Structured metadata lives in YAML frontmatter at the top of each markdown file; the document body remains markdown prose.
 - Cross-artifact references use standard relative markdown links (`[label](../path.md)`), not wiki-links — this keeps PRs reviewable on GitHub and viewers like Quartz/Obsidian still resolve them.
 - Source-of-truth artifacts are markdown. Structured derived views are regenerated from canonical sources and never become the canonical record.
-- **Non-markdown derived views** (SQLite caches, JSON indexes, generated graph data, binary artifacts) MUST be gitignored and regenerated on demand by their consumers.
-- **Markdown derived views** (e.g., a per-spec `code-locations.md`) MAY be committed when their diffs are valuable to humans — for PR review, onboarding, refactoring impact analysis, or session-resumption context for the agent. Adopters MAY gitignore a particular markdown derived view if they prefer; commit is permitted, not required.
+- Structured derived views (SQLite caches, JSON indexes, generated graph data, binary artifacts) MUST be gitignored and regenerated on demand by their consumers.
 - Exceptions to text-first source-of-truth require an explicit constitutional amendment with stated rationale.
 
 ### Frontmatter Schema
 
-The frontmatter schema applies to **spec files** (`spec.md`, `spec-and-plan.md`) and **scenario files** (`scenarios/{slug}.md`). Other governance artifacts (`system.md`, `errors.md`, `events.md`, `inbox.md`, plan files, tasks files, rule files, README files) MAY include frontmatter when a specific consumer benefits, but are not required to.
+The frontmatter schema applies to **spec files** (`spec.md`, `spec-and-plan.md`) and **scenario files** (`scenarios/{slug}.md`). Other `govern` artifacts (`system.md`, `errors.md`, `events.md`, `inbox.md`, plan files, tasks files, rule files, README files) MAY include frontmatter when a specific consumer benefits, but are not required to.
 
 #### Spec files
 
@@ -346,7 +400,7 @@ The frontmatter schema applies to **spec files** (`spec.md`, `spec-and-plan.md`)
 
 #### Open-schema rule
 
-Additional fields beyond those listed above are permitted and ignored by uninterested consumers. Examples adopters or future governance work might add: `owner`, `target_release`, `created_at`, `description`, `aliases`. The `spec-and-plan.md` template uses the open-schema rule to carry `track: lightweight` — a human-readable marker, not a pipeline-consumed field. Consumers MUST NOT error on the presence of unknown fields. `/gov:validate` reports unknown fields as informational findings (not errors).
+Additional fields beyond those listed above are permitted and ignored by uninterested consumers. Examples adopters or future `govern` work might add: `owner`, `target_release`, `created_at`, `description`, `aliases`. The `spec-and-plan.md` template uses the open-schema rule to carry `track: lightweight` — a human-readable marker, not a pipeline-consumed field. Consumers MUST NOT error on the presence of unknown fields. `/gov:validate` reports unknown fields as informational findings (not errors).
 
 ### Validation Severity
 
@@ -368,7 +422,7 @@ Published as guidance, not enforcement. Adopters and future specs MAY introduce 
 | --- | --- |
 | `cli` | Specs about slash commands or command-line interactions |
 | `commands` | Specs that introduce, rename, or significantly change slash commands |
-| `bootstrap` | Specs about adopting governance, project scaffolding, or initialization |
+| `bootstrap` | Specs about adopting `govern`, project scaffolding, or initialization |
 | `process` | Specs about workflow, lifecycle, or pipeline behavior |
 | `templates` | Specs about template files (spec, plan, scenario, project-readme, etc.) |
 | `security` | Specs about security rules, authentication, authorization |
@@ -383,7 +437,7 @@ Published as guidance, not enforcement. Adopters and future specs MAY introduce 
 
 ## Drift Prevention
 
-These principles keep facts consistent as the framework evolves. They apply both to governance itself and to projects that adopt it. Drift is a class of bug; preventing it is part of the framework's design, not an afterthought.
+These principles keep facts consistent as the framework evolves. They apply both to `govern` itself and to projects that adopt it. Drift is a class of bug; preventing it is part of the framework's design, not an afterthought.
 
 ### Canonical sources
 
@@ -399,6 +453,8 @@ For every kind of fact described in multiple places, one location is authoritati
 | Per-agent permission set | `framework/bootstrap/configure/{key}.md` |
 | Constitution section anchors | `<!-- §<anchor> -->` markers in `framework/constitution.md` |
 | Command frontmatter (description, argument-hint) | each command's own frontmatter block |
+| Rules artifact tier definition | `framework/constitution.md` §rules |
+| Rule file format and ID conventions | `specs/008-security-rules/data-model.md` |
 
 When adding a new kind of fact that may be referenced from multiple documents, name its canonical source explicitly here.
 
@@ -447,7 +503,7 @@ A signpost names what changed and points readers at the current source of truth.
 
 ### Concurrent Features
 
-The session state file (`{cli-config-dir}/{project}-session.json`) holds a single target by design. The pipeline is serial within a feature, and concurrent work on independent features uses two independent sessions in two terminals — not multi-target session state. Isolation is provided by the platform layer: `git worktree` keeps the working trees separate, and AI-agent platforms typically expose isolation primitives (Claude Code's `isolation: "worktree"` agent parameter, Cursor's worktree integration, etc.). Reach for those rather than asking governance to track multiple targets at once.
+The session state file (`{cli-config-dir}/{project}-session.json`) holds a single target by design. The pipeline is serial within a feature, and concurrent work on independent features uses two independent sessions in two terminals — not multi-target session state. Isolation is provided by the platform layer: `git worktree` keeps the working trees separate, and AI-agent platforms typically expose isolation primitives (Claude Code's `isolation: "worktree"` agent parameter, Cursor's worktree integration, etc.). Reach for those rather than asking `govern` to track multiple targets at once.
 
 <!-- §cross-spec-impact -->
 

@@ -1,6 +1,11 @@
-# Govern
+---
+description: Adopt or update govern in an existing project.
+argument-hint: "[project] [--agents=key1,key2,...] [--add-agent]"
+---
 
-Bootstrap governance in an existing project. This command fetches templates from the governance repo, scaffolds governance files for one or more AI coding CLIs, resolves placeholders, and displays next steps.
+# govern
+
+Bootstrap `govern` in an existing project. This command fetches templates from the `govern` repo, scaffolds `govern` files for one or more AI coding CLIs, resolves placeholders, and displays next steps.
 
 The same `govern.md` supports every agent the framework knows about. The set of supported agents lives in the **Agent Registry** below; per-agent values are looked up by registry key during scaffolding.
 
@@ -22,7 +27,7 @@ For each agent, these paths are computed by convention from the row above. They 
 | Configure source path | `framework/bootstrap/configure/{key}.md` |
 | Session JSON path | `{config_dir}/{project}-session.json` |
 | Project commands directory | `{config_dir}/commands/{project}/` |
-| Govern install path | `{config_dir}/commands/govern.md` |
+| `govern` install path | `{config_dir}/commands/govern.md` |
 
 ### Adding a new agent
 
@@ -86,9 +91,87 @@ For each selected agent, before fetching any files:
 
 This prevents repeated permission prompts during the fetch and scaffolding phases. The full permission set is applied later by `/{project}:configure`.
 
+## govern.md Self-Update Check
+
+Before any other fetching, scaffolding, or migration, verify the running session's `govern.md` instructions are current. The check is its own phase — ahead of pre-run migrations and the full archive fetch — so a stale-detected abort does not leave any other write on disk and does not pay the cost of fetching the multi-hundred-KB archive on a run that is going to abort anyway.
+
+### Small fetch
+
+Create a fresh temp directory used by both this check and the later archive fetch:
+
+```text
+mktemp -d -t govern-XXXXXX
+```
+
+On macOS/Linux this lands under `$TMPDIR` or `/tmp`. Never reuse a directory from a prior run — a fresh fetch is the only way `/govern` picks up upstream changes.
+
+Issue exactly one `curl` against `raw.githubusercontent.com` for the upstream bootstrap file:
+
+```text
+curl -fsSL https://raw.githubusercontent.com/stonean/govern/main/framework/bootstrap/govern.md \
+  -o {tempdir}/govern.md.upstream
+```
+
+If the fetch fails — non-zero `curl` exit, network error, or a 404 — abort the run with this error and do not continue:
+
+> Failed to fetch the govern.md self-update check ({reason}). Re-run after checking network connectivity, or report this if it persists.
+
+### Per-agent comparison
+
+For each selected agent, byte-compare `{tempdir}/govern.md.upstream` against the installed `{config_dir}/commands/govern.md` and assign one status:
+
+- **`no installed copy`** — the installed file does not exist (first run for this agent). Continue.
+- **`current`** — the two files are byte-identical, **or** the installed file is byte-identical to upstream and listed in `.govern.toml` `pinned.files` (the pin had nothing to suppress this run). Continue.
+- **`stale`** — the two files differ and the installed file is **not** pinned. The running session is using older instructions than what is current upstream.
+- **`pinned-divergent`** — the two files differ and the installed file **is** listed in `.govern.toml` `pinned.files`. The pin intentionally suppresses the update; continue, and emit a single advisory line in the post-scaffolding output.
+
+The check is scoped to **selected agents only** — agents whose `config_dir` exists in the project but are not in this run's selection are not diffed. An unselected stale agent will trip the check on its very next `/govern` run targeting it.
+
+### Stale → write and abort
+
+If any selected agent is recorded as `stale`:
+
+1. For **each stale agent**, copy `{tempdir}/govern.md.upstream` to `{config_dir}/commands/govern.md` (overwrite). The freshly fetched bootstrap lands on disk for every stale agent so the next session in any of them loads the up-to-date instructions. Do not substitute placeholders in this file — `{project}` and `{cli-config-dir}` stay literal, per the existing `govern.md` self-install rule.
+2. Run the **Post-Write Integrity Check** (see below) on each freshly written `govern.md`.
+3. Do not write `govern.md` for non-stale agents — their installed copies already match upstream.
+4. Do not write `govern.md` for `pinned-divergent` agents — the pin opts them out of automatic updates.
+5. Abort the run before any further work. Print:
+
+> **The govern command itself has updated.** Your installed copy was behind upstream and the running session is using the older instructions. The freshly fetched copy has been written to disk for stale agents.
+>
+> Stale agents updated: {comma-separated names}.
+>
+> Start a new session and re-run `/govern` to pick up the latest version.
+
+Everything past this point — **Pre-run Migrations**, **Project Configuration**, the **Archive fetch and extract**, **Frontmatter Migration**, **Shared Files**, **Per-Agent Scaffolding**, **Security Audit**, and **Post-Scaffolding Output** — is skipped. The only writes this run performed are the additive **Permission Setup** entries and the per-stale-agent `govern.md` overwrite.
+
+The next `/govern` run in a new session loads the fresh `govern.md`, the self-update check sees `current` (or `no installed copy`) for every agent, and the run proceeds normally without abort.
+
+### Pinned-divergent → continue with advisory
+
+If a selected agent is recorded as `pinned-divergent`, the run continues normally. After scaffolding, the **Post-Scaffolding Output** includes one advisory line per divergent agent (see **Post-Scaffolding Output → Pinned govern.md advisory**). The advisory is silent on runs where every pinned agent is `current` (the pinned version happens to match upstream this run).
+
+Pinning is an opt-out from automatic updates, not an opt-out from knowing the pin is currently active. When the pinned version actually drifts from upstream, the user usually wants to either review the upstream changes and unpin, or consciously confirm they are staying on the old version. Adopters who are deliberately and indefinitely on an old version see no recurring nag because the advisory only fires when divergence is real.
+
+### Current / no installed copy → continue
+
+When all selected agents are `current` or `no installed copy`, the run proceeds. The temp directory created here is reused by the **Archive fetch and extract** step below — no second `mktemp`, no leaked extra temp directory.
+
+## Pre-run Migrations
+
+These one-shot renames carry adopters who scaffolded under the prior `governance` naming forward without manual cleanup. Each is a no-op when the legacy artifact is absent.
+
+### `.governance.toml` → `.govern.toml`
+
+If `.governance.toml` exists in the project root and `.govern.toml` does not, rename it. Report `migrated config: .governance.toml → .govern.toml` in the post-scaffolding output. If both files exist, leave them alone and warn `Both .governance.toml and .govern.toml exist; remove the legacy file to silence this warning.`
+
+### `# Governance` gitignore marker → `# govern`
+
+If the project's `.gitignore` contains a `# Governance` line (the marker placed by `/govern`'s merge strategy) and does not already contain `# govern`, replace the first occurrence with `# govern`. Report `migrated .gitignore marker: # Governance → # govern` in the post-scaffolding output. The marker check used by the **.gitignore** merge step below uses the new spelling, so this rename keeps idempotency intact.
+
 ## Project Configuration
 
-If `.governance.toml` exists, read it before processing the file manifest. This file is optional — if it does not exist, use default behavior for all files.
+If `.govern.toml` exists, read it before processing the file manifest. This file is optional — if it does not exist, use default behavior for all files.
 
 ```toml
 [pinned]
@@ -104,60 +187,31 @@ Any file listed in `pinned.files` that would normally use `update` strategy is t
 
 ## File Fetching
 
-Files from the governance repo are sourced from a single archive download, extracted into a temp directory, and resolved as local paths for the rest of the run. Per-language `.gitignore` patterns from `github.com/github/gitignore` are **not** part of this archive — they remain separate `curl` calls (see the **.gitignore** subsection of **Shared Files** below).
+Files from the `govern` repo are sourced from a single archive download, extracted into the temp directory established by **govern.md Self-Update Check**, and resolved as local paths for the rest of the run. Per-language `.gitignore` patterns from `github.com/github/gitignore` are **not** part of this archive — they remain separate `curl` calls (see the **.gitignore** subsection of **Shared Files** below).
+
+This section runs only after the **govern.md Self-Update Check** passes (no stale agents). On a stale-abort, the archive is never fetched.
 
 ### Archive fetch and extract
 
-Issue exactly one `curl` against GitHub's repo-archive endpoint:
+Issue exactly one `curl` against GitHub's repo-archive endpoint, downloading into the temp directory established by the self-update check:
 
 ```text
-https://github.com/stonean/govern/archive/refs/heads/main.tar.gz
+curl -fsSL https://github.com/stonean/govern/archive/refs/heads/main.tar.gz \
+  -o {tempdir}/main.tar.gz
 ```
 
 `curl -fsSL` follows the 302 redirect to `codeload.github.com`. The archive's top-level directory is `govern-main/`; the framework files live at `govern-main/framework/...` after extraction.
 
 After fetching:
 
-1. Create a **new** temp directory on every run: `mktemp -d -t govern-XXXXXX`. On macOS/Linux this lands under `$TMPDIR` or `/tmp`. Never reuse a directory from a prior run, even if one is still on disk — a fresh fetch is the only way `/govern` picks up upstream changes, so the archive must be re-downloaded each invocation.
-2. Extract the archive into the temp directory: `tar -xzf {archive} -C {tempdir}`.
-3. Compute the framework root: `{tempdir}/govern-main/`. Treat this as the local mirror of the governance repo for the rest of the run.
+1. Extract the archive into the existing temp directory: `tar -xzf {tempdir}/main.tar.gz -C {tempdir}`.
+2. Compute the framework root: `{tempdir}/govern-main/`. Treat this as the local mirror of the `govern` repo for the rest of the run.
 
 If the fetch or extraction fails — non-zero exit from `curl` or `tar`, or a missing `govern-main/` directory after extract — abort the run with this error and do not continue scaffolding:
 
-> Failed to fetch or extract the governance archive ({reason}). Re-run after checking network connectivity, or report this if it persists.
+> Failed to fetch or extract the `govern` archive ({reason}). Re-run after checking network connectivity, or report this if it persists.
 
-A missing archive means **every** manifest entry would be missing, so partial scaffolding is impossible — the abort is the correct behavior.
-
-### Self-update pre-check
-
-After **Archive fetch and extract** completes and **before any other manifest pass** (no shared files written, no per-agent scaffolding, no security audit, no frontmatter migration), compare the freshly extracted bootstrap against each selected agent's installed copy. The reordering matters: if the pre-check aborts, the working tree must be genuinely untouched.
-
-For each selected agent, byte-compare `{tempdir}/govern-main/framework/bootstrap/govern.md` against the installed `{config_dir}/commands/govern.md` and assign one status:
-
-- **`no installed copy`** — the installed file does not exist (first run for this agent). Nothing to diverge from; continue.
-- **`current`** — the two files are byte-identical, **or** the installed file is byte-identical to upstream and listed in `.governance.toml` `pinned.files` (the pin had nothing to suppress this run). Continue.
-- **`stale`** — the two files differ and the installed file is **not** pinned. The running session is using older instructions than what the manifest pass would write.
-- **`pinned-divergent`** — the two files differ and the installed file **is** listed in `.governance.toml` `pinned.files`. The pin intentionally suppresses the update; the run continues, but the user is told once in the post-scaffolding output.
-
-The check is scoped to **selected agents only** — agents whose `config_dir` exists in the project but are not in this run's selection are not diffed. An unselected stale agent will trip the check on its very next `/govern` run targeting it; drift is still detected, just lazily.
-
-#### Stale → abort
-
-If any selected agent is recorded as `stale`, abort the run before any further work. Print:
-
-> **The govern command itself has updated.** Your installed copy is behind upstream and the running session is using the older instructions. Start a new session and re-run `/govern` to pick up the latest version.
->
-> Stale agents: {comma-separated names}.
->
-> No files were modified by this run.
-
-The abort happens after **Permission Setup** (already applied, additive, harmless) and after **Archive fetch and extract** (the work needed to detect the divergence). Everything past that point — Frontmatter Migration, the Shared Files manifest, Per-Agent Scaffolding, Security Audit, and Post-Scaffolding Output — is skipped.
-
-#### Pinned-divergent → continue with advisory
-
-If a selected agent is recorded as `pinned-divergent`, the run continues normally. After scaffolding, the **Post-Scaffolding Output** includes one advisory line per divergent agent (see **Post-Scaffolding Output → Pinned govern.md advisory**). The advisory is silent on runs where every pinned agent is `current` (the pinned version happens to match upstream this run).
-
-Pinning is an opt-out from automatic updates, not an opt-out from knowing the pin is currently active. When the pinned version actually drifts from upstream, the user usually wants to either review the upstream changes and unpin, or consciously confirm they are staying on the old version. Adopters who are deliberately and indefinitely on an old version see no recurring nag because the advisory only fires when divergence is real.
+A missing archive means **every** manifest entry would be missing, so partial scaffolding is impossible — the abort is the correct behavior. The self-update check has already completed by this point, so a stale `govern.md` would have already been written and the run would have aborted earlier.
 
 ### Per-file resolution
 
@@ -180,7 +234,7 @@ If `specs/` does not exist (first run), skip this section — there is nothing t
 
 Bring existing spec and scenario files into the YAML frontmatter format declared in `framework/constitution.md` §text-first-artifacts. Migration is idempotent: re-running on an already-migrated project produces no further metadata changes.
 
-This section runs **after File Fetching** (including the **Self-update pre-check**) so that a stale-govern abort cannot leave migration changes from old rules on the working tree. The new govern's migration logic — which may differ — is the only logic that ever writes migration changes.
+This section runs **after the govern.md Self-Update Check** so that a stale-govern abort cannot leave migration changes from old rules on the working tree. The new govern's migration logic — which may differ — is the only logic that ever writes migration changes.
 
 ### Precheck
 
@@ -204,7 +258,7 @@ Determine whether the file needs migration:
 - Otherwise, scan the first few lines after the heading for bold-prefix metadata patterns (`**Status:**`, `**Dependencies:**`, `**spec-ref:**`). If at least one is found, the file needs migration.
 - If no bold-prefix lines are present and no frontmatter exists, skip with reason "no metadata to migrate."
 
-Skip files that appear in `.governance.toml` `pinned.files` with reason "pinned." The adopter is responsible for migrating pinned files manually.
+Skip files that appear in `.govern.toml` `pinned.files` with reason "pinned." The adopter is responsible for migrating pinned files manually.
 
 ### Convert
 
@@ -257,7 +311,7 @@ Print a per-file summary at the end of the migration step:
 
 - `migrated: {file path}` for converted files
 - `skipped (already frontmatter): {file path}` for files that were already in the new format
-- `skipped (pinned): {file path}` for files listed in `.governance.toml`
+- `skipped (pinned): {file path}` for files listed in `.govern.toml`
 - `skipped (no metadata to migrate): {file path}` for files without recognizable metadata
 - `skipped (malformed metadata): {file path} — {reason}` for files that could not be parsed
 
@@ -267,7 +321,7 @@ The user reviews the result via `git diff` and commits or aborts via `git restor
 
 These files are scaffolded **once per `/govern` invocation**, regardless of how many agents are selected. They are unaffected by the agent registry.
 
-### Governance-owned shared files (strategy: update)
+### `govern`-owned shared files (strategy: update)
 
 | Source Path | Destination Path |
 | --- | --- |
@@ -295,14 +349,14 @@ These files are scaffolded **once per `/govern` invocation**, regardless of how 
 
 ### Shared files with conflict handling
 
-**AGENTS.md** (strategy: skip) — if it exists, leave it alone. If not, fetch `framework/templates/project/agents.md` from the governance repo and copy it as `AGENTS.md`, substituting `{project-name}` with the project name and `{One-line project description.}` with the project description.
+**AGENTS.md** (strategy: skip) — if it exists, leave it alone. If not, fetch `framework/templates/project/agents.md` from the `govern` repo and copy it as `AGENTS.md`, substituting `{project-name}` with the project name and `{One-line project description.}` with the project description.
 
-**CLAUDE.md** (strategy: skip) — if it exists, leave it alone. If not, fetch `framework/templates/project/claude-md.md` from the governance repo and copy it as `CLAUDE.md`. Both supported agents read `CLAUDE.md` natively (see each row's `rules_file_note`).
+**CLAUDE.md** (strategy: skip) — if it exists, leave it alone. If not, fetch `framework/templates/project/claude-md.md` from the `govern` repo and copy it as `CLAUDE.md`. Both supported agents read `CLAUDE.md` natively (see each row's `rules_file_note`).
 
-**.gitignore** (strategy: merge) — if it exists, check for a `# Governance` comment header. If the header exists, skip (already merged). If no header, append governance patterns below existing content:
+**.gitignore** (strategy: merge) — if it exists, check for a `# govern` comment header. If the header exists, skip (already merged). If no header, append `govern` patterns below existing content:
 
-1. Fetch `framework/templates/project/gitignore` from the governance repo.
-2. Append its content below a `# Governance` comment header.
+1. Fetch `framework/templates/project/gitignore` from the `govern` repo.
+2. Append its content below a `# govern` comment header.
 3. For each primary language provided by the user, fetch from `https://raw.githubusercontent.com/github/gitignore/main/{Language}.gitignore` and append below a `# {Language}` comment header.
 
 If `.gitignore` does not exist, create it from `framework/templates/project/gitignore` plus language patterns.
@@ -329,7 +383,7 @@ For each rule file that passed the trigger:
 
 1. Read the file from its destination path (`specs/security-backend.md` or `specs/security-frontend.md`).
 2. Apply the same integrity checks `/{project}:validate` uses for the security-rule check section: well-formed level-3 headings of the form `### {ID}`, the four required fields (Statement, Rationale, Verification, Source), an ID matching `{FE|BE}-{CATEGORY}-{NNN}`, and no duplicate IDs within the file.
-3. If a file fails any integrity check, report `Security audit: {path} failed to load — {reason}; skipping audit for this file.` and continue with the other rule file (if applicable). Do not abort the surrounding govern run.
+3. If a file fails any integrity check, report `Security audit: {path} failed to load — {reason}; skipping audit for this file.` and continue with the other rule file (if applicable). Do not abort the surrounding `govern` run.
 
 This mirrors validate's posture — partial or guessed-at parsing produces unreliable findings, so an unloadable file is treated as absent for audit purposes.
 
@@ -357,7 +411,7 @@ The `{one-line summary}` describes the gap concretely (e.g., `does not name a me
 
 Before appending each finding, scan the existing `specs/inbox.md` (if it exists) for any line beginning with `- [ ] {Rule ID}: {affected artifact path}` — the prefix up to the first em-dash. If a matching line is already present, skip the new finding. This makes the audit safe to re-trigger after a user deletes and re-installs a rule file.
 
-Findings the user has already groomed (lines that have been removed or rewritten) are not re-emitted — once the adopter has triaged a finding, govern does not resurrect it.
+Findings the user has already groomed (lines that have been removed or rewritten) are not re-emitted — once the adopter has triaged a finding, `govern` does not resurrect it.
 
 ### Audit summary
 
@@ -367,13 +421,13 @@ Track the count of newly appended findings (post-deduplication). The total is re
 
 For each selected agent (in registry row order), run these steps with `{config_dir}` resolved to the agent's value and `{key}` to the agent's key.
 
-### Project-specific files (strategy: create)
+### Command stubs (strategy: create)
 
-Created on first run, skipped on re-run.
+Slash command stubs the adopter fills in. Created on first run, skipped on re-run.
 
 | Source Path | Destination Path |
 | --- | --- |
-| `framework/templates/project/initialize.md` | `{config_dir}/commands/{project}/initialize.md` |
+| `framework/templates/commands/initialize.md` | `{config_dir}/commands/{project}/initialize.md` |
 
 ### Slash commands (strategy: update)
 
@@ -401,16 +455,28 @@ The configure row uses the agent-specific source `framework/bootstrap/configure/
 
 ### Slash command cleanup
 
-After processing the slash command manifest above, list all `.md` files in `{config_dir}/commands/{project}/`. For each file that is **not** in the slash command manifest above, **not** the `initialize.md` file, and **not** listed in `.governance.toml` `pinned.files`:
+After processing the slash command manifest above, list all `.md` files in `{config_dir}/commands/{project}/`. For each file that is **not** in the slash command manifest above, **not** the `initialize.md` file, and **not** listed in `.govern.toml` `pinned.files`:
 
 - Delete the file.
 - Report it as "removed" in the post-scaffolding summary.
 
 Files listed in `pinned.files` are never deleted — report them as "pinned (kept)" instead.
 
+### Legacy `skills/` directory cleanup
+
+Before the workflow recommendation flow runs, remove any legacy `{config_dir}/commands/{project}/skills/` directory left behind by `/govern` runs prior to the `skills/` → `workflows/` rename (introduced by spec 010 and delivered alongside spec 005's reopen). The rename moved every workflow file into the new `workflows/` directory, so the old `skills/` tree is unreferenced and safe to remove.
+
+Behavior:
+
+- If `{config_dir}/commands/{project}/skills/` does not exist, skip silently.
+- If it exists and is **not** listed in `.govern.toml` `pinned.files` (path comparison after placeholder resolution), recursively delete the directory and report `removed (legacy skills/ directory): {config_dir}/commands/{project}/skills/` in the post-scaffolding summary.
+- If it exists and **is** pinned, leave it alone and report `pinned (kept): {config_dir}/commands/{project}/skills/`.
+
+The cleanup is unconditional once the directory is detected — the new `workflows/` directory has already replaced it on every `/govern` run since the rename, so any remaining `skills/` tree is necessarily stale.
+
 ### Workflow recommendation (strategy: create per accepted workflow)
 
-After the slash command cleanup, offer any newly registered workflows that match the project's tech stack and have not yet been scaffolded for this agent.
+After the legacy `skills/` cleanup and the slash command cleanup, offer any newly registered workflows that match the project's tech stack and have not yet been scaffolded for this agent.
 
 1. **Legacy workflow cleanup.** Before reading the registry, remove any workflow files left behind by `/govern` runs prior to the post-005 filename rename (which simplified `{category}-{language}-{tool}.md` to `{tool}.md`). In `{config_dir}/commands/{project}/workflows/`, delete any file whose name appears in this exact set:
 
@@ -424,7 +490,7 @@ After the slash command cleanup, offer any newly registered workflows that match
    - `test-python-pytest.md`
    - `test-typescript-vitest.md`
 
-   Files listed in `.governance.toml` `pinned.files` are skipped — adopters who customized a legacy file and want to keep it can pin its destination path. Report each removal in the post-scaffolding summary as `removed (legacy workflow): {filename}`. The check is by exact filename match against the set above; custom user files (e.g., `pytest-fast.md`) are never affected because they aren't in the set. The cleanup runs every `/govern` invocation; once the legacy files are gone, subsequent runs are silent no-ops for this step.
+   Files listed in `.govern.toml` `pinned.files` are skipped — adopters who customized a legacy file and want to keep it can pin its destination path. Report each removal in the post-scaffolding summary as `removed (legacy workflow): {filename}`. The check is by exact filename match against the set above; custom user files (e.g., `pytest-fast.md`) are never affected because they aren't in the set. The cleanup runs every `/govern` invocation; once the legacy files are gone, subsequent runs are silent no-ops for this step.
 
 2. **Read the synced registry** at `workflows/registry.json` (the project-local copy written by the manifest above). If the file is missing or not valid JSON, warn `Workflow registry not found or invalid, skipping workflow recommendations` and skip the rest of this section. Validate each entry against the schema in `specs/005-workflows/data-model.md`; drop invalid entries with a per-entry warning.
 
@@ -455,24 +521,24 @@ After the slash command cleanup, offer any newly registered workflows that match
 
 9. **Fetch and write accepted workflows.** For each accepted entry:
 
-   - Fetch `framework/workflows/{entry.template}` from the governance repo using the same URL pattern as the rest of govern's fetches. (Note: the workflows directory is flat — no inner `templates/` subdirectory.)
+   - Fetch `framework/workflows/{entry.template}` from the `govern` repo using the same URL pattern as the rest of `govern`'s fetches. (Note: the workflows directory is flat — no inner `templates/` subdirectory.)
    - If the fetch fails or the file is missing, warn `Workflow file {entry.template} not found, skipping` and continue with the next accepted entry. Do not abort the surrounding scaffolding.
    - Replace every `{project}` with the user-provided project name and every `{cli-config-dir}` with the agent's `config_dir`.
    - Write the substituted content to `{config_dir}/commands/{project}/workflows/{entry.template}` (creating the `workflows/` directory if needed). Report the file as "scaffolded" in the post-scaffolding summary.
 
 10. **Discovery note for Auggie.** Auggie's official docs document subdirectory namespacing for one level (`.augment/commands/foo/bar.md` → `/foo:bar`). Multi-level paths like `.augment/commands/{project}/workflows/lint.md` should resolve to `/{project}:workflows:lint` by the same colon-namespace convention, but a user adopting Auggie may want to confirm autocomplete the first time. Claude Code's two-level path is documented and works as expected.
 
-11. **Adopter migration note.** Adopters who already ran `/{project}:govern` before the original `skills/` → `workflows/` rename will have a `skills/` directory in their project. After re-running govern, they should manually delete the legacy `skills/` directory — workflow files have been re-created under `workflows/`, and the old directory is no longer referenced. (The post-005 filename rename — `{category}-{language}-{tool}.md` → `{tool}.md` — does not need a manual step; the **Legacy workflow cleanup** in step 1 handles it automatically.)
+11. **Legacy directory note.** The `skills/` → `workflows/` rename (introduced by spec 010) and the post-005 filename rename (`{category}-{language}-{tool}.md` → `{tool}.md`) are both handled automatically. The legacy `skills/` directory is removed by the **Legacy `skills/` directory cleanup** step that runs before this section, and legacy workflow filenames are removed by the **Legacy workflow cleanup** in step 1. No manual cleanup is required.
 
 ### Session state (strategy: create)
 
 Create `{config_dir}/{project}-session.json` with empty content `{}` only if it does not already exist.
 
-### Govern self-installation (strategy: update)
+### `govern` self-installation (strategy: update)
 
 Fetch `framework/bootstrap/govern.md` and write it to `{config_dir}/commands/govern.md`. This is the same unified file the user is currently running, copied into every selected agent's command directory so the command is invokable from that agent on subsequent runs.
 
-In this file (and only this file), keep `{project}` and `{cli-config-dir}` as literal placeholders — do **not** substitute. Govern itself reads `$ARGUMENTS` for the project name on each run.
+In this file (and only this file), keep `{project}` and `{cli-config-dir}` as literal placeholders — do **not** substitute. `govern` itself reads `$ARGUMENTS` for the project name on each run.
 
 After writing, run the **Post-Write Integrity Check** below.
 
@@ -487,7 +553,7 @@ In every copied file (except `{config_dir}/commands/govern.md` for each selected
 
 ## Post-Write Integrity Check
 
-After writing `{config_dir}/commands/govern.md` for each selected agent, verify the file starts with `# Govern`. If it does not, the write was corrupted — report the error and re-read the file from the extracted archive. Apply the check independently per agent.
+After writing `{config_dir}/commands/govern.md` for any selected agent — whether via the **govern.md Self-Update Check** (stale-write path) or the **`govern` self-installation** manifest step — verify the file starts with `# govern`. If it does not, the write was corrupted — report the error and re-read the source: `{tempdir}/govern.md.upstream` for the self-update path, or `{tempdir}/govern-main/framework/bootstrap/govern.md` for the manifest path. Apply the check independently per agent.
 
 ## Re-Run Behavior
 
@@ -513,9 +579,10 @@ After writing `{config_dir}/commands/govern.md` for each selected agent, verify 
 - **All supported agents already adopted with `--add-agent`** — show the prompt with all agents pre-selected; if the user confirms with no additions, treat it as a routine update and continue silently.
 - **`settings.local.json` already has entries beyond the bootstrap** — only add the curl/ls bootstrap entries if missing. Do not overwrite, deduplicate, or reorder entries added by `/{project}:configure` or by the user.
 - **`govern.md` content already matches the version on disk** — when the manifest's `update` strategy compares fetched content to the installed file, identical content reports as "unchanged" and avoids a redundant write. Same rule applies to per-project `configure.md` and other update-strategy files.
-- **Pinned `govern.md` in `.governance.toml`** — the manifest's `update` strategy still skips the file (no overwrite). The **Self-update pre-check** byte-compares anyway: matching upstream → recorded as `current`, no output; divergent from upstream → recorded as `pinned-divergent`, the run continues, and a single advisory line is printed in the post-scaffolding output. A pinned `govern.md` will not pick up upstream changes until the pin is removed, but the user is told once when the pin is currently suppressing real divergence.
-- **Self-update pre-check sees a stale govern in an unselected adopted agent** — the check is scoped to selected agents only. The unselected agent's stale copy is not diffed and does not trigger the abort; it will be detected the next time the user runs `/govern` against it.
-- **Archive fetch or extract fails** — clean abort with the error message defined in **File Fetching → Archive fetch and extract**. No partial scaffolding: a missing archive means every manifest entry would be missing, and the user re-runs after the transient failure clears.
+- **Pinned `govern.md` in `.govern.toml`** — the manifest's `update` strategy still skips the file (no overwrite), and the **govern.md Self-Update Check** never writes pinned files even on the stale-detect path. The check byte-compares anyway: matching upstream → recorded as `current`, no output; divergent from upstream → recorded as `pinned-divergent`, the run continues, and a single advisory line is printed in the post-scaffolding output. A pinned `govern.md` will not pick up upstream changes until the pin is removed, but the user is told once when the pin is currently suppressing real divergence.
+- **Self-update check sees a stale `govern` in an unselected adopted agent** — the check is scoped to selected agents only. The unselected agent's stale copy is not diffed, not written, and does not trigger the abort; it will be detected the next time the user runs `/govern` against it.
+- **Self-update small fetch fails** — clean abort with the error message defined in **govern.md Self-Update Check → Small fetch**. No `govern.md` writes occur, and the archive fetch is skipped. The user re-runs after the transient failure clears.
+- **Archive fetch or extract fails** — clean abort with the error message defined in **File Fetching → Archive fetch and extract**. The self-update check has already passed by this point, so no additional `govern.md` writes are pending; the user re-runs after the transient failure clears.
 - **A required source file is absent from the extracted archive** — warn `Source not found in archive: {source-path}; skipping.` and continue with the remaining manifest entries. Preserves the per-entry "do not abort on a single fetch error" guarantee at the entry level even though the archive itself is fetched once.
 - **First-run prompt with no detected dirs and only one supported agent** — the prompt still appears (the agent must be explicitly chosen), but the single agent is pre-selected. Confirming is one keystroke.
 - **Running `govern.md` cannot infer its own install path** — fall back to no pre-selection in the first-run prompt. The user picks explicitly.
@@ -533,11 +600,11 @@ After scaffolding, display:
 
 ### Pinned `govern.md` advisory
 
-If the **Self-update pre-check** recorded any selected agent as `pinned-divergent` (the installed `{config_dir}/commands/govern.md` is listed in `.governance.toml` `pinned.files` and differs from upstream), append one advisory line per divergent agent after the file summary and before next steps:
+If the **govern.md Self-Update Check** recorded any selected agent as `pinned-divergent` (the installed `{config_dir}/commands/govern.md` is listed in `.govern.toml` `pinned.files` and differs from upstream), append one advisory line per divergent agent after the file summary and before next steps:
 
 > {agent}: govern.md pinned, upstream has changed.
 
-The advisory is omitted when no agent is `pinned-divergent` — adopters whose pinned version still matches upstream see nothing; adopters with no pin see nothing. The pre-check `stale` path aborts before this output is ever produced, so the advisory is only ever about pinned files.
+The advisory is omitted when no agent is `pinned-divergent` — adopters whose pinned version still matches upstream see nothing; adopters with no pin see nothing. The check's `stale` path aborts before this output is ever produced, so the advisory is only ever about pinned files.
 
 ### Security audit summary
 
@@ -557,7 +624,7 @@ This summary complements `/{project}:groom`, which is the user's path to working
 
 ---
 
-**Governance adopted successfully.**
+**govern adopted successfully.**
 
 Adopted agents: {comma-separated `name` of selected agents}.
 
@@ -572,7 +639,7 @@ Next steps:
 
 To adopt an additional agent later, re-run `/govern --add-agent`.
 
-Tip: `npx quartz specs/` renders your specs as a navigable graph view in the browser. Other PKM tools (Obsidian, Logseq, MkDocs) work unchanged — pick whichever fits your workflow, or none.
+Tip: `specs/` is plain markdown and works in any PKM tool (Obsidian, Logseq, Foam) or as a published site (Quartz, MkDocs). Pick whichever fits your workflow, or none.
 
 ---
 
@@ -580,19 +647,19 @@ Tip: `npx quartz specs/` renders your specs as a navigable graph view in the bro
 
 ---
 
-**Governance updated successfully.**
+**govern updated successfully.**
 
 Updated agents: {comma-separated `name` of selected agents}.
 
 Review changes to updated files and commit when ready. To adopt an additional agent, re-run `/govern --add-agent`.
 
-Tip: `npx quartz specs/` renders your specs as a navigable graph view in the browser. Other PKM tools (Obsidian, Logseq, MkDocs) work unchanged.
+Tip: `specs/` is plain markdown and works in any PKM tool (Obsidian, Logseq, Foam) or as a published site (Quartz, MkDocs).
 
 ---
 
 ## Idempotency
 
-This command is safe to run again. Files with `update` strategy are always overwritten with the latest governance version — unless pinned in `.governance.toml`, in which case they are skipped. Files with `create` strategy skip existing files. The `.gitignore` merge checks for the `# Governance` marker before appending. `skip` strategy files are never overwritten.
+This command is safe to run again. Files with `update` strategy are always overwritten with the latest `govern` version — unless pinned in `.govern.toml`, in which case they are skipped. Files with `create` strategy skip existing files. The `.gitignore` merge checks for the `# govern` marker before appending. `skip` strategy files are never overwritten.
 
 Re-runs are additive across agents — adopting a new agent leaves existing agents' files untouched.
 

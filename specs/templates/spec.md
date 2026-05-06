@@ -1,4 +1,5 @@
 ---
+title: "{NNN-feature-name} — spec"
 status: draft
 dependencies: []
 tags: []
@@ -35,6 +36,24 @@ At least one concrete, testable criterion is required before `/{project}:clarify
 - [ ] Health endpoint returns 503 with a JSON body listing failures when any check fails
 - [ ] Auth middleware rejects requests without a valid session or token with 401
 
+-->
+
+## Applicable Rules
+
+<!-- Optional. Cite rule IDs (from rule files like specs/security-backend.md) that
+     constrain the surface this spec touches. Citing rules here makes the cross-
+     cutting requirements this spec depends on visible to reviewers and to
+     /{project}:validate, which checks every cited ID against the loaded rule
+     files. See §rules in the constitution for when a concern belongs in a rule
+     vs an acceptance criterion vs a scenario.
+
+     Replace this comment block with a list of rule references when applicable:
+
+- `BE-AUTHN-001` — memory-hard password hashing
+- `FE-XSS-002` — output encoding strategy
+- `BE-INPUT-001` — server-side input validation
+
+     Delete this section entirely if no rules apply to the area this spec covers.
 -->
 
 ## Open Questions
