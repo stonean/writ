@@ -171,7 +171,9 @@ If the project's `.gitignore` contains a `# Governance` line (the marker placed 
 
 ## Project Configuration
 
-If `.govern.toml` exists, read it before processing the file manifest. This file is optional — if it does not exist, use default behavior for all files.
+`.govern.toml` is the project's configuration and persisted-decisions store. If the file exists, read it before processing the file manifest. The file is optional — if it does not exist, use default behavior for every key. If the file exists but is malformed (TOML parse error), abort the run with a clear error rather than silently proceeding.
+
+The file is a flat collection of top-level sections. There is no umbrella namespace; each section is keyed to the thing it governs. The two sections `/govern` reads today:
 
 ```toml
 [pinned]
@@ -181,9 +183,21 @@ files = [
   ".claude/commands/myapp/implement.md",
   "constitution.md",
 ]
+
+[workflows]
+# Workflow categories the user has chosen to permanently decline at the
+# per-category recommendation prompt. Match is case-insensitive against the
+# registry-derived category list (Linting, Formatting, Testing, Migrations,
+# Code Review, Deployment). Created lazily by /govern when the user picks
+# "Skip and don't ask again" at the prompt.
+declined_categories = ["Linting", "Formatting"]
 ```
 
-Any file listed in `pinned.files` that would normally use `update` strategy is treated as `skip` instead. Report pinned files in the post-scaffolding summary.
+`pinned.files` — any file listed that would normally use `update` strategy is treated as `skip` instead. Report pinned files in the post-scaffolding summary.
+
+`workflows.declined_categories` — categories listed here suppress the per-category workflow recommendation prompt entirely (see the **Workflow recommendation** flow below). Entries that don't match any canonical category name are reported once each in the post-scaffolding summary as `unrecognized workflow decline: "{value}" (in .govern.toml)` but do not abort the run.
+
+The full schema (allowed values, case-insensitive matching, empty-section behavior, future-section guidance) is declared in [`specs/019-config-decisions/data-model.md`](../../specs/019-config-decisions/data-model.md).
 
 ## File Fetching
 
@@ -328,6 +342,8 @@ These files are scaffolded **once per `/govern` invocation**, regardless of how 
 | `framework/constitution.md` | `constitution.md` |
 | `framework/rules/security-backend.md` | `specs/security-backend.md` |
 | `framework/rules/security-frontend.md` | `specs/security-frontend.md` |
+| `framework/rules/configuration.md` | `specs/configuration.md` |
+| `framework/bootstrap/hooks/govern-pre-commit` | `.githooks/govern-pre-commit` |
 | `.markdownlint-cli2.jsonc` | `.markdownlint-cli2.jsonc` |
 | `framework/templates/spec/spec.md` | `specs/templates/spec.md` |
 | `framework/templates/spec/plan.md` | `specs/templates/plan.md` |
@@ -346,6 +362,8 @@ These files are scaffolded **once per `/govern` invocation**, regardless of how 
 | `framework/templates/project/errors.md` | `specs/errors.md` |
 | `framework/templates/project/events.md` | `specs/events.md` |
 | `framework/templates/project/inbox.md` | `specs/inbox.md` |
+| `scripts/gen-spec-deps.sh` | `scripts/gen-spec-deps.sh` |
+| `framework/bootstrap/hooks/pre-commit` | `.githooks/pre-commit` |
 
 ### Shared files with conflict handling
 
@@ -421,14 +439,6 @@ Track the count of newly appended findings (post-deduplication). The total is re
 
 For each selected agent (in registry row order), run these steps with `{config_dir}` resolved to the agent's value and `{key}` to the agent's key.
 
-### Command stubs (strategy: create)
-
-Slash command stubs the adopter fills in. Created on first run, skipped on re-run.
-
-| Source Path | Destination Path |
-| --- | --- |
-| `framework/templates/commands/initialize.md` | `{config_dir}/commands/{project}/initialize.md` |
-
 ### Slash commands (strategy: update)
 
 Fetch each command template and copy it into `{config_dir}/commands/{project}/`. In each copied file, replace `{project}` with the user-provided project name and `{cli-config-dir}` with `{config_dir}`.
@@ -444,7 +454,6 @@ Fetch each command template and copy it into `{config_dir}/commands/{project}/`.
 | `framework/commands/implement.md` | `{config_dir}/commands/{project}/implement.md` |
 | `framework/commands/log.md` | `{config_dir}/commands/{project}/log.md` |
 | `framework/commands/plan.md` | `{config_dir}/commands/{project}/plan.md` |
-| `framework/commands/spawn.md` | `{config_dir}/commands/{project}/spawn.md` |
 | `framework/commands/specify.md` | `{config_dir}/commands/{project}/specify.md` |
 | `framework/commands/status.md` | `{config_dir}/commands/{project}/status.md` |
 | `framework/commands/target.md` | `{config_dir}/commands/{project}/target.md` |
@@ -455,7 +464,7 @@ The configure row uses the agent-specific source `framework/bootstrap/configure/
 
 ### Slash command cleanup
 
-After processing the slash command manifest above, list all `.md` files in `{config_dir}/commands/{project}/`. For each file that is **not** in the slash command manifest above, **not** the `initialize.md` file, and **not** listed in `.govern.toml` `pinned.files`:
+After processing the slash command manifest above, list all `.md` files in `{config_dir}/commands/{project}/`. For each file that is **not** in the slash command manifest above and **not** listed in `.govern.toml` `pinned.files`:
 
 - Delete the file.
 - Report it as "removed" in the post-scaffolding summary.
@@ -509,26 +518,67 @@ After the legacy `skills/` cleanup and the slash command cleanup, offer any newl
 
    If `AGENTS.md` is missing, has no Tech Stack table, or the table is empty (still the comment placeholder), skip the rest of this section silently — there is nothing to match against.
 
-4. **Match registry entries** against the project's tech stack. For each entry, look up the project's value for `entry.trigger.field` and compare case-insensitively against `entry.trigger.value`. Collect every matching entry.
+4. **Load recorded declines.** Read `.govern.toml` if it exists and collect entries from `[workflows] declined_categories` into a normalized lowercase set. This set is consulted at the per-category prompt step to suppress prompts for categories the user has previously chosen to permanently decline. Behavior:
 
-5. **Filter out already-scaffolded workflows.** For each match, check whether `{config_dir}/commands/{project}/workflows/{entry.template}` already exists. If it does, the workflow was previously scaffolded (for this agent) — drop it from the candidate list. Already-scaffolded workflow files are never overwritten, regardless of content changes upstream.
+   - If `.govern.toml` does not exist: the decline set is empty. Skip silently.
+   - If `.govern.toml` exists without a `[workflows]` section: the decline set is empty. Skip silently.
+   - If `[workflows]` exists without a `declined_categories` key, or the key is an empty array: the decline set is empty. Skip silently.
+   - If the file is malformed (TOML parse error): the surrounding **Project Configuration** load already aborted the run; this step never executes on a malformed file.
 
-6. **Silent skip when there is nothing new to offer.** If no candidates remain, do not prompt the user and proceed to **Session state**.
+   While building the set, validate each entry case-insensitively against the canonical category list (`Linting`, `Formatting`, `Testing`, `Migrations`, `Code Review`, `Deployment`). Entries that don't match any canonical name are still loaded into the set (they cannot suppress anything because no category will hash to them) and recorded for the post-scaffolding summary as one line each: `unrecognized workflow decline: "{value}" (in .govern.toml)`. Unrecognized entries do not abort the run and do not affect prompts for valid categories.
 
-7. **Group remaining candidates by category** in the order: `Linting`, `Formatting`, `Testing`, `Migrations`, `Code Review`, `Deployment`. Within each category, list each match's `name` and `description`.
+5. **Match registry entries** against the project's tech stack. For each entry, look up the project's value for `entry.trigger.field` and compare case-insensitively against `entry.trigger.value`. Collect every matching entry.
 
-8. **Present per-category accept/skip prompts** via `AskUserQuestion`: "Scaffold these {category} workflows for {agent name}?" with the matched entries listed. Options: `Yes, scaffold all in this category`, `No, skip this category`. The user must explicitly accept — no workflows are scaffolded without consent.
+6. **Filter out already-scaffolded workflows.** For each match, check whether `{config_dir}/commands/{project}/workflows/{entry.template}` already exists. If it does, the workflow was previously scaffolded (for this agent) — drop it from the candidate list. Already-scaffolded workflow files are never overwritten, regardless of content changes upstream.
 
-9. **Fetch and write accepted workflows.** For each accepted entry:
+7. **Silent skip when there is nothing new to offer.** If no candidates remain, do not prompt the user and proceed to **Session state**.
 
-   - Fetch `framework/workflows/{entry.template}` from the `govern` repo using the same URL pattern as the rest of `govern`'s fetches. (Note: the workflows directory is flat — no inner `templates/` subdirectory.)
-   - If the fetch fails or the file is missing, warn `Workflow file {entry.template} not found, skipping` and continue with the next accepted entry. Do not abort the surrounding scaffolding.
-   - Replace every `{project}` with the user-provided project name and every `{cli-config-dir}` with the agent's `config_dir`.
-   - Write the substituted content to `{config_dir}/commands/{project}/workflows/{entry.template}` (creating the `workflows/` directory if needed). Report the file as "scaffolded" in the post-scaffolding summary.
+8. **Group remaining candidates by category** in the order: `Linting`, `Formatting`, `Testing`, `Migrations`, `Code Review`, `Deployment`. Within each category, list each match's `name` and `description`.
 
-10. **Discovery note for Auggie.** Auggie's official docs document subdirectory namespacing for one level (`.augment/commands/foo/bar.md` → `/foo:bar`). Multi-level paths like `.augment/commands/{project}/workflows/lint.md` should resolve to `/{project}:workflows:lint` by the same colon-namespace convention, but a user adopting Auggie may want to confirm autocomplete the first time. Claude Code's two-level path is documented and works as expected.
+9. **Per-category prompt or suppress.** Walk the grouped categories in order. For each category:
 
-11. **Legacy directory note.** The `skills/` → `workflows/` rename (introduced by spec 010) and the post-005 filename rename (`{category}-{language}-{tool}.md` → `{tool}.md`) are both handled automatically. The legacy `skills/` directory is removed by the **Legacy `skills/` directory cleanup** step that runs before this section, and legacy workflow filenames are removed by the **Legacy workflow cleanup** in step 1. No manual cleanup is required.
+   - **Suppress branch.** If the category (lowercased) is in the decline set loaded at step 4, do not invoke `AskUserQuestion`. Skip scaffolding for this category's workflows entirely. Report `suppressed (workflow): {Category} (declined in .govern.toml)` in the post-scaffolding summary, using the category's title-case display name. Continue with the next category.
+   - **Prompt branch.** Otherwise, present `AskUserQuestion`: "Scaffold these {category} workflows for {agent name}?" with the matched entries listed. Options, in order, exactly as labeled:
+
+     1. `Yes, scaffold all in this category`
+     2. `Skip this run`
+     3. `Skip and don't ask again`
+
+     The user must explicitly accept — no workflows are scaffolded without consent. Route the answer:
+
+     - `Yes, scaffold all in this category` — proceed to step 11 with this category's matched entries marked as accepted.
+     - `Skip this run` — skip scaffolding for this category's workflows. Write nothing to `.govern.toml`. The user will be asked again on the next run.
+     - `Skip and don't ask again` — skip scaffolding for this category's workflows AND mark the category for persistence (consumed at step 10).
+
+10. **Record persisted declines.** For every category whose answer at step 9 was `Skip and don't ask again`, append the category name (in title case) to `[workflows] declined_categories` in `.govern.toml`. Behavior:
+
+    - **`.govern.toml` does not exist** — create it with exactly:
+
+      ```toml
+      [workflows]
+      declined_categories = ["{Category}"]
+      ```
+
+      Report `created .govern.toml to record decline` in the post-scaffolding summary (one line, regardless of how many categories were declined this run).
+
+    - **`.govern.toml` exists without a `[workflows]` section** — append the section at the end of the file (preceded by a blank line). Use the same shape as the create case.
+
+    - **`[workflows]` section exists without a `declined_categories` key** — add the key inside the existing section.
+
+    - **`declined_categories` key exists** — append the new category name to the array, deduplicating case-insensitively (do not write a duplicate if `Linting` is added when `linting` is already present).
+
+    Preserve all existing TOML content: other sections (`[pinned]`, future sections), comments, ordering, and surrounding whitespace. Read the file, modify the `[workflows]` section in place, and write the result back. Report each newly persisted category once in the summary as `recorded decline (workflow): {Category} (in .govern.toml)`.
+
+11. **Fetch and write accepted workflows.** For each accepted entry (categories whose step-9 answer was `Yes, scaffold all in this category`):
+
+    - Fetch `framework/workflows/{entry.template}` from the `govern` repo using the same URL pattern as the rest of `govern`'s fetches. (Note: the workflows directory is flat — no inner `templates/` subdirectory.)
+    - If the fetch fails or the file is missing, warn `Workflow file {entry.template} not found, skipping` and continue with the next accepted entry. Do not abort the surrounding scaffolding.
+    - Replace every `{project}` with the user-provided project name and every `{cli-config-dir}` with the agent's `config_dir`.
+    - Write the substituted content to `{config_dir}/commands/{project}/workflows/{entry.template}` (creating the `workflows/` directory if needed). Report the file as "scaffolded" in the post-scaffolding summary.
+
+12. **Discovery note for Auggie.** Auggie's official docs document subdirectory namespacing for one level (`.augment/commands/foo/bar.md` → `/foo:bar`). Multi-level paths like `.augment/commands/{project}/workflows/lint.md` should resolve to `/{project}:workflows:lint` by the same colon-namespace convention, but a user adopting Auggie may want to confirm autocomplete the first time. Claude Code's two-level path is documented and works as expected.
+
+13. **Legacy directory note.** The `skills/` → `workflows/` rename (introduced by spec 010) and the post-005 filename rename (`{category}-{language}-{tool}.md` → `{tool}.md`) are both handled automatically. The legacy `skills/` directory is removed by the **Legacy `skills/` directory cleanup** step that runs before this section, and legacy workflow filenames are removed by the **Legacy workflow cleanup** in step 1. No manual cleanup is required.
 
 ### Session state (strategy: create)
 
@@ -541,6 +591,73 @@ Fetch `framework/bootstrap/govern.md` and write it to `{config_dir}/commands/gov
 In this file (and only this file), keep `{project}` and `{cli-config-dir}` as literal placeholders — do **not** substitute. `govern` itself reads `$ARGUMENTS` for the project name on each run.
 
 After writing, run the **Post-Write Integrity Check** below.
+
+## Hook Installation
+
+After **Per-Agent Scaffolding** completes, manage the project's git pre-commit hook so generated artifacts (currently spec `dependencies:` frontmatter, future generators if added) stay in sync on every commit.
+
+Two files participate, with different ownership models:
+
+- **`.githooks/govern-pre-commit`** is govern-owned. Placed by the **Shared Files** manifest with `update` strategy; carries the `# managed-by: govern` sentinel on line 2; rewritten on every `/govern` run unless pinned in `.govern.toml`. Holds the generator orchestration (currently `scripts/gen-spec-deps.sh` plus output staging).
+- **`.githooks/pre-commit`** is adopter-owned. Placed by the manifest with `create` strategy on first install; never overwritten thereafter. Initial content invokes `./.githooks/govern-pre-commit`; adopters add their own pre-commit checks above or below that invocation.
+
+This section's job is to wire git up to actually run the outer hook (`git config core.hooksPath .githooks`) without clobbering whatever hook system the project already uses.
+
+Detection runs in this order — first match wins:
+
+1. **`core.hooksPath` already points at `.githooks`** — already wired up. The manifest passes have already written `.githooks/govern-pre-commit` (`update`) and, on first run, `.githooks/pre-commit` (`create`). Run `chmod +x .githooks/pre-commit .githooks/govern-pre-commit` to ensure both files are executable. Report `pre-commit hook already wired up`.
+2. **`core.hooksPath` points at any other path** — the project uses a custom hooks dir. Skip wiring; report a warning with the manual integration snippet below.
+3. **A third-party hook system is detected** — any of `.husky/`, `.pre-commit-config.yaml`, `lefthook.yml`, or `lefthook-local.yml` exists. Skip wiring; report a warning with the manual integration snippet below.
+4. **No conflicts** — run `git config core.hooksPath .githooks` and `chmod +x .githooks/pre-commit .githooks/govern-pre-commit`. Report `pre-commit hook installed`.
+
+The detection ladder no longer treats `.githooks/pre-commit` itself as a govern-managed file — under the new model the outer file is adopter-owned, so its presence is not a signal that govern installed it. Migration of pre-existing govern-installed hooks (from spec-017 adopters) is handled by the **Migration from spec-017 hook** subsection below, which runs before the detection ladder.
+
+`scripts/gen-spec-deps.sh` ships in the **Shared Files** manifest with `create` strategy. First run installs it; subsequent runs leave it alone (so adopters can edit the script without `/govern` clobbering).
+
+### Migration from spec-017 hook
+
+Adopters who installed the pre-commit hook under spec 017 have a single govern-managed file at `.githooks/pre-commit` carrying the `# managed-by: govern` sentinel on line 2. The new layout splits that file into a govern-owned inner script and an adopter-owned outer stub at the same path. Migration runs **before** the detection ladder above and **before** the manifest passes for the two hook files, so the manifest's `update`/`create` strategies see the post-rename layout.
+
+Trigger:
+
+- `.githooks/pre-commit` exists, AND
+- the file's line 2 is exactly `# managed-by: govern`, AND
+- `.githooks/govern-pre-commit` does **not** exist.
+
+When all three hold, perform the rename:
+
+1. Determine whether the file is tracked: `git ls-files --error-unmatch .githooks/pre-commit` (exit code 0 = tracked).
+2. If tracked: `git mv .githooks/pre-commit .githooks/govern-pre-commit`. If untracked: `mv .githooks/pre-commit .githooks/govern-pre-commit`.
+3. Continue with the detection ladder and the manifest passes. The renamed inner file is byte-identical to upstream for unmodified adopters, so the `update` strategy on `.githooks/govern-pre-commit` is a no-op; the `create` strategy on `.githooks/pre-commit` writes the new outer stub since the path is now empty.
+4. Append to the post-scaffolding summary: `migrated pre-commit hook: .githooks/pre-commit → .githooks/govern-pre-commit; created adopter-owned .githooks/pre-commit stub`.
+
+Recovery branches:
+
+- **Pre-existing `.githooks/govern-pre-commit` blocks the rename.** If the inner-file destination already exists when the trigger fires, abort the rename without renaming anything. Report `migration skipped: .githooks/govern-pre-commit already exists; resolve manually` and continue with the detection ladder and manifest passes. The `update` strategy overwrites the pre-existing inner with the shipped contents; the existing `.githooks/pre-commit` (still carrying the sentinel) is left in place but is no longer detected as govern-managed by the new ladder, so it is treated as adopter-owned going forward. The adopter resolves the duplicate manually.
+- **`git mv` fails (permissions, repo locked, file in use).** Report `migration failed: could not rename .githooks/pre-commit; resolve manually` and continue with the detection ladder and manifest passes. The `update` strategy installs `.githooks/govern-pre-commit` from scratch (destination doesn't exist); the `create` strategy sees `.githooks/pre-commit` still in place and skips. The adopter ends up with both files (legacy sentinel'd outer still functional, new govern-owned inner idle) and completes the migration manually by editing the outer to call `./.githooks/govern-pre-commit`.
+
+If any of the trigger conditions does not hold, skip the migration silently — the detection ladder handles the case.
+
+### Manual integration snippet (for skip cases)
+
+When detection skips installation (cases 2 and 3 above), report this message to the user:
+
+> The `govern` pre-commit hook was not wired up because your project already uses an existing hook system. To get automatic spec-deps regeneration on every commit, add this line to your existing pre-commit chain:
+>
+> ```bash
+> ./.githooks/govern-pre-commit
+> ```
+>
+> The shipped hook script is idempotent and safe to call from another hook runner.
+
+### Pinning
+
+Both hook files are subject to `.govern.toml` `pinned.files`, but the meaning differs by ownership:
+
+- **`.githooks/govern-pre-commit`** is the only file pinning is meaningful for. A pinned inner file uses `skip` strategy instead of `update` — `/govern` does not overwrite it across releases. Useful when an adopter has customized govern's generator orchestration and does not want it reset.
+- **`.githooks/pre-commit`** is `create`-strategy and never overwritten after first run regardless of pinning. Listing it in `pinned.files` is harmless but has no effect.
+
+The Hook Installation section above still runs and may set `core.hooksPath` regardless of pinning.
 
 ## Placeholder Substitution
 
@@ -593,6 +710,7 @@ After scaffolding, display:
 
 - Summary of files created, updated, unchanged, skipped, pinned, merged, and removed — grouped by agent for per-agent files, with shared files in their own group
 - For each scaffolded agent, the agent's `rules_file_note` from the registry
+- Hook installation status — one line: `pre-commit hook installed`, `pre-commit hook already wired up`, or `pre-commit hook skipped — existing {husky|lefthook|pre-commit-py|core.hooksPath} detected; see manual integration snippet above`. When the spec-017 → spec-018 migration ran, append the migration summary line described in §Hook Installation > Migration from spec-017 hook (or the relevant recovery-branch warning if the rename was skipped or failed).
 - Any fetch failures encountered
 - Pinned `govern.md` advisory (if applicable — see below)
 - Security audit summary (if applicable — see below)
