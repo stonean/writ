@@ -25,7 +25,7 @@ Read `.claude/writ-session.json`. If the session includes a `scenario` and `scen
 
 ### Spec File Detection
 
-Check for `spec.md` first, then `spec-and-plan.md`. Use whichever exists. If neither exists, stop and report: "Spec does not exist. Run `/writ:specify` first."
+Read `spec.md`. If it does not exist, stop and report: "Spec does not exist. Run `/writ:specify` first."
 
 ### Gate
 
@@ -37,7 +37,7 @@ Read the spec's frontmatter `status` field and count entries in the `## Open Que
 | `draft` | no | Verify acceptance criteria, then advance to `clarified` (existing hot path) |
 | `clarified` / `planned` / `in-progress` | no | Stop with: "Spec is already `{status}`. Run `/writ:plan` to create the technical plan." for `clarified`, or "Run `/writ:implement` to continue implementation." for `planned` / `in-progress`. |
 | `clarified` / `planned` / `in-progress` | yes | Run the **Recovery path** below. |
-| `done` | (any) | Stop with: "Spec is `done`. Run `/writ:elaborate` to capture this as a scenario instead." Exit without mutation. |
+| `done` | (any) | Stop with: "Spec is `done`. Run `/writ:ask` to capture this as a scenario instead." Exit without mutation. |
 
 The "already `{status}`" branch and the `done` branch never modify any file.
 

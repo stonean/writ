@@ -1,0 +1,176 @@
+---
+description: Audit artifacts against each other — spec, plan, tasks, scenarios, frontmatter, dependencies, rule IDs. Read-only.
+argument-hint: "[--all] [--fix] [feature]"
+parity:
+  semantic-fields:
+    - "findings[].message"
+  strict-fields:
+    - "findings[].rule-id"
+    - "findings[].severity"
+---
+
+# Analyze
+
+Audit a feature's artifacts against each other and against the framework's rule set.
+
+## Purpose
+
+Audit a feature's spec, plan, tasks, and data model for consistency. Read-only; reports issues without modifying files. Use this to catch problems before the next pipeline gate fires.
+
+Renamed from `/validate` in spec 023 to align with the emerging spec-driven-development standard (GitHub Spec Kit uses `/analyze` for the same artifact-vs-artifact audit role). Complementary to `/writ:review`, which audits **code** against rules.
+
+## Context
+
+Parse `$ARGUMENTS` for flags and an optional feature identifier:
+
+- **Feature identifier** — a feature number, partial name, or full directory name. Overrides the session target.
+- **`--all`** — scan all feature directories under `specs/` instead of a single target. Report results grouped by feature.
+
+If `--all` is not present, use the feature identifier if provided, otherwise fall back to the session target from `.claude/writ-session.json`. If no target can be resolved, stop and tell the user to run `/writ:target` first or use `--all`.
+
+## Scope Boundaries
+
+- This is a read-only command. Do NOT modify any files.
+- Read only files within the target feature's directory, the cross-spec files needed for reference checks (`specs/system.md`, `specs/events.md`, `specs/errors.md`, dependency spec files), and the project's installed command-source frontmatter for the project-level consistency section below (`.claude/commands/writ/*.md` frontmatter only, plus `.claude/commands/govern.md` frontmatter for the bootstrap installer **if that file exists**). May invoke `scripts/gen-readme-table.sh --dry-run`, `scripts/gen-help-tables.sh --dry-run`, and `scripts/gen-spec-deps.sh --dry-run` to surface generator drift. Do NOT read source code or test files.
+- Reference: §spec-requirements, §plan-phase, §tasks-phase, §readiness-check, §scenarios, §cross-spec-impact, §text-first-artifacts, §markdown-standards, §drift-prevention (constitution loaded by `/writ:target` — do not re-read).
+
+## Instructions
+
+> **For agent runtimes**: backticked primitive names in this section map to MCP tools the optional [gvrn runtime](https://crates.io/crates/gvrn) registers as `gov-rt:<primitive>` (e.g., `gov-rt:read-spec`). When that MCP server is registered for your session, **call the `gov-rt:*` tool** for each step listed below — that is the deterministic path. When the server is not registered, walk the prose to produce the same result. The two paths share a contract; neither one wraps the other.
+
+1. Invoke `read-spec` (MCP: `gov-rt:read-spec`) against the targeted feature to load frontmatter, sections, and the open-question count from the body. The result drives subsequent steps' tier classification (status governs which artifact-completeness checks apply).
+
+2. Invoke `validate-frontmatter` (MCP: `gov-rt:validate-frontmatter`) against the spec path to check that the YAML block parses and that the required fields (status, dependencies) are present with valid values. Frontmatter findings are hard-fail tier; the rest of the procedure still runs to surface every issue in a single pass.
+
+3. Invoke `traverse-deps` (MCP: `gov-rt:traverse-deps`) against the feature to verify each dependency directory exists and carries a compatible status. Missing dependencies are blocking; incompatible statuses are blocking when this spec is at clarified or later.
+
+4. Invoke `resolve-anchor` (MCP: `gov-rt:resolve-anchor`) against the spec path to confirm every section reference of the form §anchor resolves to a corresponding marker comment. Unresolved anchors are advisory — they usually indicate the constitution was renamed or restructured without updating callers. Otherwise, fall back to the markdown-only path.
+
+5. Invoke `check-rule-ids` (MCP: `gov-rt:check-rule-ids`) against the spec path with the project's rule files. Cited rule IDs that are missing are blocking; cited rule IDs marked deprecated are advisory. Otherwise, follow the markdown-only path.
+
+6. Invoke `run-generator` (MCP: `gov-rt:run-generator`) against scripts/gen-spec-deps.sh to detect drift in the body inline links and frontmatter dependencies. A non-zero exit surfaces as an advisory drift finding — the pre-commit hook resolves these on the next commit. Otherwise, follow the markdown-only path.
+
+7. Invoke `lint-markdown` (MCP: `gov-rt:lint-markdown`) against the markdown files in the feature directory. Each returned violation is surfaced as an advisory finding. Otherwise, follow the markdown-only path.
+
+8. <!-- llm:assessSpecQuality --> For every loaded MUST-tier rule whose Verification trigger fires against the spec, request a semantic assessment via the extension point. The host responds with a structured finding carrying severity, rule-id, location, and message. MUST-tier findings join the Blocking tier in the rendered report. Otherwise, fall back to the markdown-only path.
+
+9. <!-- llm:assessSpecQuality --> For every loaded SHOULD-tier rule whose Verification trigger fires against the spec, request a semantic assessment via the extension point. SHOULD-tier findings join the Advisory tier in the rendered report. Otherwise, fall back to the markdown-only path.
+
+10. Render the report (host responsibility): list hard-fail and blocking findings first, advisory findings next, then informational. For each finding, include what failed, what was expected, what was found, and a suggested fix. With `--fix` set, additionally revert any status-done spec whose review block has drifted to blocking — see the Review state drift section in the markdown-only reference below.
+
+## Markdown-only reference
+
+The full set of checks (frontmatter schema, spec integrity, artifact completeness, plan consistency, task consistency, scenario consistency, cross-spec references, review state drift, rule integrity, project-level consistency, severity classification, and report shape) is documented below for the markdown-only path. The numbered steps above invoke the mechanical primitives that automate the deterministic checks; the host applies the same checks against the markdown-only path when the runtime is unavailable.
+
+### Frontmatter schema (hard fail)
+
+For each spec file (`spec.md`):
+
+- A YAML frontmatter block exists at the top of the file (delimited by `---` lines).
+- The frontmatter parses as valid YAML.
+- The `status` field is present and one of: `draft`, `clarified`, `planned`, `in-progress`, `done`.
+- The `dependencies` field is present and is a list (empty list permitted).
+
+For each scenario file (`scenarios/{slug}.md`):
+
+- A YAML frontmatter block exists at the top of the file.
+- The frontmatter parses as valid YAML.
+- Either the `section` field (new schema) or the legacy `spec-ref` field is present and non-empty. New scenarios written by `/writ:ask` use `section`. Pre-017 scenarios keep `spec-ref` per the frozen-archaeology rule; either field satisfies the check.
+
+Reference: the schema is canonically declared in `framework/constitution.md` §text-first-artifacts.
+
+### Spec integrity (blocking)
+
+- Acceptance criteria section exists with at least one checkbox item
+- No placeholder or empty acceptance criteria
+- Open questions consistent with status (`clarified` or later must have none). When this check fails — a spec at `clarified` / `planned` / `in-progress` with one or more open questions in the body — the spec is in the recovery state defined by spec 014. Suggested fix: run `/writ:clarify` (its recovery path will revert status to `draft` and walk the questions), or `/writ:ask` on a fresh question (which performs the back-edge automatically).
+- No implementation code blocks (function signatures, package paths, language-specific snippets) in the spec — those belong in plan.md. Format examples, directory structures, and user-facing commands are acceptable when they define behavioral contracts.
+
+### Artifact completeness (blocking)
+
+- If status is `planned` or later: plan.md exists
+- If status is `planned` or later and feature introduces or modifies domain entities or data structures: data-model.md exists
+- If status is `planned` or later: tasks.md exists
+
+### Plan consistency (blocking if plan exists)
+
+- Plan references the spec
+- Technical decisions section has at least one decision with rationale
+- Affected files section lists specific file paths
+- Plan does not contradict `specs/system.md`
+
+### Task consistency (blocking if tasks exist)
+
+- Tasks reference the plan
+- Each task has a "done when" condition
+- Tasks are numbered and ordered
+
+### Scenario consistency (advisory)
+
+- Every scenario file has Context and Behavior sections (frontmatter `spec-ref` is checked under Frontmatter schema above)
+- Every scenario file in `scenarios/` has a corresponding task in `tasks.md`
+- Scenario-linked tasks in `tasks.md` are marked complete if the spec status is `done`
+
+### Cross-spec references (advisory)
+
+- Event types mentioned in spec or plan align with `specs/events.md`
+- Error codes follow the convention from `specs/errors.md`
+- Data model definitions do not conflict with other specs' data-model.md files
+
+### Review state drift (blocking)
+
+For each spec at `status: done`, read the spec's frontmatter `review:` block:
+
+- `review.last-run` is set to a non-null timestamp. If the `review:` block is **present** but `last-run` is missing or `null`, report `Review drift: done spec missing review — run /gov:review` (**blocking**)
+- `review.blocking` is `false`. If `true`, report `Review drift: done spec has unresolved MUST violations — see review.md` (**blocking**)
+
+**Grandfather rule.** A `done` spec whose frontmatter has no `review:` block at all is treated as pre-`/gov:review` and exempt from this check. The block is added by the spec template (so every newly-scaffolded spec ships with it) and by `/gov:review` on first run; its absence on a done spec means the spec reached done before `/gov:review` existed. Adopters who want retroactive review run `/gov:review` against the spec to populate the block, after which the spec is subject to the drift check on every subsequent analyze.
+
+Specs not at `status: done` are silently exempt — the `review:` block is populated lazily on first `/gov:review` run, so its absence on `draft` / `clarified` / `planned` / `in-progress` specs is normal.
+
+When `--fix` is set, this check additionally reverts affected specs from `done` to `in-progress` and emits a one-line notice for each (`reverted: specs/{feature}/{file} from done to in-progress — re-run /gov:review`). The revert is never silent; the notice is the point of the action. Re-running `/gov:review` on each reverted spec is left to the operator — auto-running it during `--fix` is out of scope. The grandfather rule applies under `--fix` too: pre-feature `done` specs with no `review:` block are never reverted.
+
+### Rules (blocking and advisory)
+
+Rules are the cross-cutting tier of the framework's three-tier requirement model (see §rules in `constitution.md`). Load each rule file in the project's rule-file list. The list currently consists of:
+
+- `specs/security-backend.md`
+- `specs/security-frontend.md`
+- `specs/configuration.md`
+
+Each file is independently optional — only the files that exist in the project are loaded. New rule files are introduced via their own feature spec; when a new rule file ships, the rule-file list above is updated in the same change.
+
+For each loaded rule file:
+
+- Every rule heading is level-3 and contains only the rule ID (no surrounding text)
+- Every rule has the three required fields: a block-quoted Statement, `**Rationale:**` paragraph, and `**Verification:**` paragraph
+- Every rule's ID matches the format declared in the rule file's introducing-spec data-model (`{BE|FE}-{CATEGORY}-{NNN}` for security files; `CFG-{CONST|ENV}-{NNN}` for configuration)
+- No two rules in the same file share an ID
+
+If any check above fails, the affected rule file is treated as unloadable for the remainder of this analyze pass.
+
+### Project-level consistency (advisory)
+
+These checks span the project's installed command set and constitution rather than the target feature. They catch drift in the framework files `govern` ships, surfaced per the Drift Prevention principles in `constitution.md` §drift-prevention. Run once per `/writ:analyze` invocation regardless of which feature is targeted; with `--all`, run once before per-feature output.
+
+Read inputs:
+
+- `constitution.md` (already loaded by `/writ:target`)
+- `.claude/commands/writ/help.md`
+- The full set of `.md` files in `.claude/commands/writ/` (frontmatter only — do not read bodies for these checks)
+- `.claude/commands/govern.md` if it exists (frontmatter only — the bootstrap installer lives outside the project namespace)
+
+Checks:
+
+- **Generator drift** — run `scripts/gen-readme-table.sh --dry-run` and `scripts/gen-help-tables.sh --dry-run` (when the scripts exist in the project). Non-empty diff means the README Feature Specs table or the help.md command tables are out of sync with their sources. Report each as `Generator out of sync: {script}; the next commit will resolve.`
+- **Anchor resolution** — every §anchor reference in any installed command file (typically in "Reference: §X, §Y" Scope-Boundaries lines) resolves to a corresponding marker in `constitution.md`.
+- **Command frontmatter completeness** — every `.md` file in the installed commands directory has a `description:` frontmatter field; the same check applies to `.claude/commands/govern.md` when that file exists. Files whose body documents an `$ARGUMENTS` parameter additionally have `argument-hint:`. Report missing fields; do not check value content.
+
+These are advisory, not blocking — they signal framework drift that the project should resolve at its convenience. They do not prevent pipeline advancement on the target feature.
+
+### Severity tiers
+
+- **Hard fail (blocking)** — required-field violations and malformed frontmatter. The spec is not valid until these are fixed; pipeline advancement is blocked.
+- **Blocking** — structural or content issues that must be fixed before the next pipeline gate fires.
+- **Advisory** — issues that should be fixed but do not block advancement.
+- **Informational** — observations that may warrant attention but are neither errors nor warnings.

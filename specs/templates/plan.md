@@ -19,7 +19,7 @@ Alternative considered: Valkey-only — rejected because sessions would be lost 
 
 ## Affected Files
 
-<!-- Planning aid only — `/{project}:implement` derives the runtime write boundary
+<!-- Planning aid only — `/writ:implement` derives the runtime write boundary
      from `git diff` against the spec dir's first commit. List files you expect
      to create or modify so reviewers can sanity-check scope. The list does not
      need to be exhaustive; implement-time additions surface naturally. Example:

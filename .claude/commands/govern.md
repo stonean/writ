@@ -1,6 +1,14 @@
 ---
 description: Adopt or update govern in an existing project.
 argument-hint: "[project] [--agents=key1,key2,...] [--add-agent]"
+parity:
+  strict-files:
+    - "{cli-config-dir}/commands/govern.md"
+    - "{cli-config-dir}/commands/{project}/specify.md"
+    - "{cli-config-dir}/commands/{project}/clarify.md"
+    - "AGENTS.md"
+  semantic-fields:
+    - completion-message
 ---
 
 # govern
@@ -8,6 +16,28 @@ argument-hint: "[project] [--agents=key1,key2,...] [--add-agent]"
 Bootstrap `govern` in an existing project. This command fetches templates from the `govern` repo, scaffolds `govern` files for one or more AI coding CLIs, resolves placeholders, and displays next steps.
 
 The same `govern.md` supports every agent the framework knows about. The set of supported agents lives in the **Agent Registry** below; per-agent values are looked up by registry key during scaffolding.
+
+## Instructions
+
+> **For agent runtimes**: backticked primitive names in this section (`fetch-archive`, `extract-archive`, `apply-manifest`, `merge-managed-block`, `enforce-manifest`) map to MCP tools the optional [gvrn runtime](https://crates.io/crates/gvrn) registers as `gov-rt:<primitive>` (e.g., `gov-rt:fetch-archive`). When that MCP server is registered for your session, **call the `gov-rt:*` tool** for each step listed below — that is the deterministic path. When it is not registered, walk the markdown-only reference below (`tar -xzf`, `curl`, etc.) to produce the same result. The two paths share a contract; neither one wraps the other.
+
+**Procedural fidelity.** Execute the steps below as written. The only confirmation prompts to issue are those the procedure specifies: project inputs (§Inputs), agent-selection prompts on `--add-agent` / first-run (§Agent Selection), the legacy `spec-and-plan.md` rename (§Pre-run Migrations), and per-category workflow prompts (§Workflow recommendation, step 9). Do not stop to warn about uncommitted edits to update-strategy files, custom slash commands that **Slash command cleanup** is about to remove, or "data loss" from the stale → write-and-abort path. The procedure already encodes safety: `.govern.toml` `[pinned] files` is the opt-out, the stale path writes upstream and aborts cleanly (recoverable from git), and slash-command cleanup is unconditional for unpinned files. Extra prompts duplicate information the procedure already gives the user and stall routine runs.
+
+1. The walker context carries the inputs the host has already gathered and validated: project (the destination project name), description (one-line project description), languages (comma-separated), agents (registry keys), framework-version (release tag), archive-url and sha256-url (computed from framework-version), staging-dir, substitutions-map, manifest-entries (the per-strategy list described in **Shared Files** and **Per-Agent Scaffolding**), pinned-list (from `.govern.toml`'s `[pinned] files` block), gitignore-block (the `.claude/`, `specs/.cache/`, etc. lines), enforce-directories (the slash-command directories whose top-level `*.md` files are pruned to the manifest), and the per-agent govern-install entry with `keep-literals: ["project", "cli-config-dir"]`. The host runs the markdown-only reference below to collect inputs, derive registry values, validate `.govern.toml`, and seed context; the runtime walks the procedure that follows.
+
+2. Invoke `fetch-archive` (MCP: `gov-rt:fetch-archive`) to download the framework tarball. The primitive verifies the sha256 against a sidecar URL when one is supplied; without a sidecar (the live-on-main case, since GitHub's auto-generated source tarballs ship without sidecars) it returns the computed digest and `verified: false`, leaving any out-of-band verification to the host. A sidecar mismatch halts the procedure with an `error` envelope so no partial state lands in the destination tree.
+
+3. Invoke `extract-archive` (MCP: `gov-rt:extract-archive`) to expand the verified tarball into the staging directory. Path-traversal protection is applied per entry; symlinks are skipped. Otherwise, follow the markdown-only path's `tar -xzf` workflow.
+
+4. Invoke `apply-manifest` (MCP: `gov-rt:apply-manifest`) with the host-built manifest entries and the pinned list. The primitive walks each entry, applies the per-entry strategy (update for framework-owned files, create for adopter-seedable files, skip-if-conflict for adopter-owned templates — the three strategy values defined in **Shared Files** below), short-circuits on the pinned list, returns aggregate counts the host surfaces in the completion message. This single call replaces the per-file update / create / skip loops the markdown-only reference describes below.
+
+5. Invoke `merge-managed-block` (MCP: `gov-rt:merge-managed-block`) against `.gitignore` with `marker-style: "line-prefix"` and `marker: "govern"` to install or update the framework-managed block (the `.claude/`, `specs/.cache/`, etc. lines). First-run creates the file; subsequent runs update only the region between the `# govern` preamble line and the next blank line, preserving the rest of the file byte-for-byte. Replaces the inline `grep` check the markdown-only reference describes for the `.gitignore` merge step.
+
+6. Invoke `enforce-manifest` (MCP: `gov-rt:enforce-manifest`) once per directory in the host's enforce-directories list (typically the per-agent slash-command directory, plus legacy paths slated for removal). The primitive removes files matching the glob-include arg (default `*.md`) whose relative path is neither in the expected list nor pinned. One call replaces the slash-command manifest enforcement loop, the legacy `skills/` directory removal, and the legacy workflow filename removal that the markdown-only reference describes.
+
+7. Invoke `apply-manifest` (MCP: `gov-rt:apply-manifest`) a second time with a single entry for the per-agent `govern` self-install (the `{cli-config-dir}/commands/govern.md` path) and `keep-literals: ["project", "cli-config-dir"]`. This keeps the `{project}` and `{cli-config-dir}` placeholders literal in the installed file so the **next** adopter's `/govern` run substitutes them per **that** project — not this one. The split from step 4 isolates the keep-literals concern from the bulk substitute step.
+
+8. Render the completion message (host responsibility): list the agents configured, the next pipeline command (`/{project}:specify`), the optional runtime install pointer (see the README's Runtime section), and any per-agent post-install reminders from the registry rows above.
 
 ## Agent Registry
 
@@ -169,6 +199,25 @@ If `.governance.toml` exists in the project root and `.govern.toml` does not, re
 
 If the project's `.gitignore` contains a `# Governance` line (the marker placed by `/govern`'s merge strategy) and does not already contain `# govern`, replace the first occurrence with `# govern`. Report `migrated .gitignore marker: # Governance → # govern` in the post-scaffolding output. The marker check used by the **.gitignore** merge step below uses the new spelling, so this rename keeps idempotency intact.
 
+### `spec-and-plan.md` → `spec.md` (lightweight-track sunset)
+
+The lightweight track was removed in spec 023. Adopters who scaffolded under the prior dual-template model may still have `spec-and-plan.md` files at any non-`done` status under `specs/`. Pipeline commands now look for `spec.md` only — those files would fail the "spec does not exist" gate on the next command.
+
+The migration check walks `specs/*/spec-and-plan.md` once per `/govern` run. For each match, prompt the user with the source path and the proposed destination (`specs/{NNN-feature}/spec.md`):
+
+```text
+Found legacy spec-and-plan.md: specs/{NNN-feature}/spec-and-plan.md
+Rename to specs/{NNN-feature}/spec.md? (Y/n)
+```
+
+On confirm, rename via `mv`. On decline, emit a warning and continue:
+
+```text
+warning: specs/{NNN-feature}/spec-and-plan.md kept; pipeline commands will fail on this feature until renamed manually.
+```
+
+Report `migrated N spec-and-plan.md files` in the post-scaffolding output when N > 0; omit the line when N = 0. The check is idempotent — finds nothing on second run. Files at `status: done` are also renamed (the rename is just a filename change; the body and frontmatter are unchanged, so the frozen-archaeology rule is preserved by the byte-for-byte identity of the file content).
+
 ## Project Configuration
 
 `.govern.toml` is the project's configuration and persisted-decisions store. If the file exists, read it before processing the file manifest. The file is optional — if it does not exist, use default behavior for every key. If the file exists but is malformed (TOML parse error), abort the run with a clear error rather than silently proceeding.
@@ -263,7 +312,6 @@ Exit before any modifications. Unrelated in-flight work outside `specs/` does no
 For each file matching one of:
 
 - `specs/**/spec.md`
-- `specs/**/spec-and-plan.md`
 - `specs/**/scenarios/*.md`
 
 Determine whether the file needs migration:
@@ -278,7 +326,7 @@ Skip files that appear in `.govern.toml` `pinned.files` with reason "pinned." Th
 
 For each file that needs migration:
 
-**Spec files** (`spec.md`, `spec-and-plan.md`):
+**Spec files** (`spec.md`):
 
 - Extract `**Status:** {value}` and `**Dependencies:** {value}` from the body.
 - For dependencies, parse the comma-separated slug list. The literal value `none` becomes an empty list (`[]`).
@@ -351,7 +399,6 @@ These files are scaffolded **once per `/govern` invocation**, regardless of how 
 | `framework/templates/spec/data-model.md` | `specs/templates/data-model.md` |
 | `framework/templates/spec/research.md` | `specs/templates/research.md` |
 | `framework/templates/spec/scenario.md` | `specs/templates/scenario.md` |
-| `framework/templates/spec/spec-and-plan.md` | `specs/templates/spec-and-plan.md` |
 | `framework/workflows/registry.json` | `workflows/registry.json` |
 
 ### Project-specific shared files (strategy: create)
@@ -400,7 +447,7 @@ If either condition fails, skip this section silently — no output, no finding,
 For each rule file that passed the trigger:
 
 1. Read the file from its destination path (`specs/security-backend.md` or `specs/security-frontend.md`).
-2. Apply the same integrity checks `/{project}:validate` uses for the security-rule check section: well-formed level-3 headings of the form `### {ID}`, the four required fields (Statement, Rationale, Verification, Source), an ID matching `{FE|BE}-{CATEGORY}-{NNN}`, and no duplicate IDs within the file.
+2. Apply the same integrity checks `/{project}:analyze` uses for the security-rule check section: well-formed level-3 headings of the form `### {ID}`, the four required fields (Statement, Rationale, Verification, Source), an ID matching `{FE|BE}-{CATEGORY}-{NNN}`, and no duplicate IDs within the file.
 3. If a file fails any integrity check, report `Security audit: {path} failed to load — {reason}; skipping audit for this file.` and continue with the other rule file (if applicable). Do not abort the surrounding `govern` run.
 
 This mirrors validate's posture — partial or guessed-at parsing produces unreliable findings, so an unloadable file is treated as absent for audit purposes.
@@ -409,7 +456,7 @@ This mirrors validate's posture — partial or guessed-at parsing produces unrel
 
 For each rule that loaded successfully:
 
-1. Identify the artifacts in scope: `specs/NNN-*/spec.md`, `specs/NNN-*/spec-and-plan.md`, `specs/NNN-*/plan.md`, and any `specs/NNN-*/scenarios/*.md`.
+1. Identify the artifacts in scope: `specs/NNN-*/spec.md`, `specs/NNN-*/plan.md`, and any `specs/NNN-*/scenarios/*.md`.
 2. Read the rule's **Verification** field. The field describes the trigger — what makes the rule applicable to a given artifact — and the commitment the artifact must include when triggered.
 3. For each artifact whose content fires the rule's trigger but does not include the required commitment, produce one finding.
 
@@ -446,18 +493,17 @@ Fetch each command template and copy it into `{config_dir}/commands/{project}/`.
 | Source Path | Destination Path |
 | --- | --- |
 | `framework/commands/ask.md` | `{config_dir}/commands/{project}/ask.md` |
-| `framework/commands/capture.md` | `{config_dir}/commands/{project}/capture.md` |
 | `framework/commands/clarify.md` | `{config_dir}/commands/{project}/clarify.md` |
-| `framework/commands/elaborate.md` | `{config_dir}/commands/{project}/elaborate.md` |
 | `framework/commands/groom.md` | `{config_dir}/commands/{project}/groom.md` |
 | `framework/commands/help.md` | `{config_dir}/commands/{project}/help.md` |
 | `framework/commands/implement.md` | `{config_dir}/commands/{project}/implement.md` |
 | `framework/commands/log.md` | `{config_dir}/commands/{project}/log.md` |
 | `framework/commands/plan.md` | `{config_dir}/commands/{project}/plan.md` |
+| `framework/commands/review.md` | `{config_dir}/commands/{project}/review.md` |
 | `framework/commands/specify.md` | `{config_dir}/commands/{project}/specify.md` |
 | `framework/commands/status.md` | `{config_dir}/commands/{project}/status.md` |
 | `framework/commands/target.md` | `{config_dir}/commands/{project}/target.md` |
-| `framework/commands/validate.md` | `{config_dir}/commands/{project}/validate.md` |
+| `framework/commands/analyze.md` | `{config_dir}/commands/{project}/analyze.md` |
 | `framework/bootstrap/configure/{key}.md` | `{config_dir}/commands/{project}/configure.md` |
 
 The configure row uses the agent-specific source `framework/bootstrap/configure/{key}.md` and writes it as the canonical `configure.md` in the project's command directory.
@@ -754,6 +800,7 @@ Next steps:
 4. Use `/{project}:log` to record any known issues or bugs into `specs/inbox.md`.
 5. Run `/{project}:groom` to walk the inbox and route each item to its proper spec or scenario.
 6. Create your first feature spec: `/{project}:specify {feature description}`.
+7. Optional: install the deterministic runtime for faster slash commands — see [Runtime](https://github.com/stonean/govern#runtime) in the govern README.
 
 To adopt an additional agent later, re-run `/govern --add-agent`.
 
@@ -771,7 +818,7 @@ Updated agents: {comma-separated `name` of selected agents}.
 
 Review changes to updated files and commit when ready. To adopt an additional agent, re-run `/govern --add-agent`.
 
-Tip: `specs/` is plain markdown and works in any PKM tool (Obsidian, Logseq, Foam) or as a published site (Quartz, MkDocs).
+Tip: `specs/` is plain markdown and works in any PKM tool (Obsidian, Logseq, Foam) or as a published site (Quartz, MkDocs). Optional: install the deterministic runtime for faster slash commands — see [Runtime](https://github.com/stonean/govern#runtime) in the govern README.
 
 ---
 

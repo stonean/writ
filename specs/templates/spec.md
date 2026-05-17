@@ -1,6 +1,13 @@
 ---
 status: draft
 dependencies: []
+review:
+  last-run: null
+  reviewed-against: null
+  must-violations: 0
+  should-violations: 0
+  low-confidence: 0
+  blocking: false
 ---
 
 # {NNN} — {Feature Name}
@@ -14,19 +21,19 @@ dependencies: []
      beyond Acceptance Criteria and Open Questions.
 
      Metadata (status, dependencies) lives in the YAML frontmatter block above —
-     not in the body. Run /{project}:clarify, /{project}:plan, and /{project}:implement
+     not in the body. Run /writ:clarify, /writ:plan, and /writ:implement
      to advance status; the commands update the frontmatter for you. The
      `dependencies` list is generated from inline markdown links to sibling specs
      in the body — do not edit it by hand.
 
      Scenarios: when a spec section needs lower-level elaboration (edge cases, bug fixes,
-     detailed behavior), run /{project}:elaborate to create a scenario file under
+     detailed behavior), run /writ:ask to record a scenario file under
      specs/{NNN-feature-name}/scenarios/.
 -->
 
 ## Acceptance Criteria
 
-At least one concrete, testable criterion is required before `/{project}:clarify` will advance the spec.
+At least one concrete, testable criterion is required before `/writ:clarify` will advance the spec.
 
 <!-- Concrete, testable conditions that define "done". Each criterion should be verifiable
      through a test or observable behavior. Replace this comment block with real `- [ ]`
@@ -43,7 +50,7 @@ At least one concrete, testable criterion is required before `/{project}:clarify
 <!-- Optional. Cite rule IDs (from rule files like specs/security-backend.md) that
      constrain the surface this spec touches. Citing rules here makes the cross-
      cutting requirements this spec depends on visible to reviewers and to
-     /{project}:validate, which checks every cited ID against the loaded rule
+     /writ:analyze, which checks every cited ID against the loaded rule
      files. See §rules in the constitution for when a concern belongs in a rule
      vs an acceptance criterion vs a scenario.
 

@@ -1,6 +1,9 @@
 ---
 description: Set the working feature (and optionally scenario) for this session.
 argument-hint: "[feature[/scenario]]"
+parity:
+  strict-files:
+    - .claude/gov-session.json
 ---
 
 # Target
@@ -13,85 +16,39 @@ Establishes which feature spec all subsequent `/writ:*` commands operate on. Opt
 
 ## Scope Boundaries
 
-- Read `constitution.md` once per session and the targeted feature's `spec.md` (or `spec-and-plan.md`) frontmatter and open-question count. Read the targeted scenario file only when one is specified.
+- Read `constitution.md` once per session and the targeted feature's `spec.md` frontmatter and open-question count. Read the targeted scenario file only when one is specified.
 - Do NOT read plan files, tasks, source code, test files, or unrelated specs' bodies.
-- Do NOT modify any spec, plan, scenario, or source file. The only file written is the session JSON. Status transitions belong to the pipeline commands (`/writ:clarify`, `/writ:plan`, `/writ:implement`) and to `/writ:elaborate` (the documented `done → in-progress` back-edge).
+- Do NOT modify any spec, plan, scenario, or source file. The only file written is the session JSON. Status transitions belong to the pipeline commands (`/writ:clarify`, `/writ:plan`, `/writ:implement`) and to `/writ:ask` (the documented back-edges: `clarified|planned|in-progress → draft` on a new question, and `done → in-progress` on a new scenario).
 - Reference: §spec-lifecycle, §scenarios, §concurrent-features, §text-first-artifacts.
 
 ## Instructions
 
-### No arguments — display current target
+> **For agent runtimes**: backticked primitive names in this section map to MCP tools the optional [gvrn runtime](https://crates.io/crates/gvrn) registers as `gov-rt:<primitive>` (e.g., `gov-rt:read-spec`). When that MCP server is registered for your session, **call the `gov-rt:*` tool** for each step listed below — that is the deterministic path. When the server is not registered, walk the prose to produce the same result. The two paths share a contract; neither one wraps the other.
 
-If `$ARGUMENTS` is empty or contains only whitespace (note: `0`, `00`, `000`, or any other valid string is NOT empty — treat any non-whitespace value as a feature identifier):
+1. When the invocation has no argument (whitespace or empty), read the session JSON to display the current target. If the file is empty or absent, report no target set; otherwise display the feature name and status, the scenario detail when one is targeted (scenario name, the section field or legacy spec-ref field, and the context summary), and the artifacts list. Then stop — the steps below only apply when an argument is supplied. Treat `0`, `00`, or any other non-whitespace string as a valid feature identifier.
 
-1. Read `.claude/writ-session.json`. If the file does not exist or is empty, report: "No target set. Run `/writ:target {feature}` to set one."
-2. Display the current target:
-   - Feature name and current status
-   - Scenario name, spec-ref, and context summary (if a scenario is targeted)
-   - Artifacts present
-3. Inform the user how to change focus:
-   - `/writ:target {feature}` — target a feature
-   - `/writ:target {feature}/{scenario-slug}` — target a specific scenario
-4. Stop here.
+2. Parse the argument: when the value contains a slash, split into a feature-part and a scenario-slug; otherwise treat the value as a feature-part with no scenario. Resolve the feature-part by accepting a feature number, a partial name, or a full directory name; search the specs directory for a matching name. If ambiguous, list matches and ask the user to choose. If no match, report the feature does not exist and list available features. (Host responsibility — no runtime primitive iterates the specs directory; otherwise, fall back to the markdown-only path.)
 
-### With arguments — set target
+3. Load the constitution file once per session to make its §sections available for subsequent commands. (Host responsibility — no primitive reads the constitution; otherwise, fall back to the markdown-only path.)
 
-1. Parse `$ARGUMENTS`:
-   - If it contains a `/`, split into `{feature-part}` and `{scenario-slug}`.
-   - Otherwise, treat the entire argument as `{feature-part}` with no scenario.
+4. Recompute dependencies as a safety net by running scripts/gen-spec-deps.sh as a dry run; if the dry run reports a diff, run it for real to sync the frontmatter dependencies from body inline links. The pre-commit hook normally keeps this in sync; this step catches uncommitted body edits. (Host responsibility today; the runtime exposes an equivalent procedural wrapper used by other commands. Otherwise, follow the markdown-only path.)
 
-2. **Resolve feature:** Accept `{feature-part}` as a feature number (e.g., `001`), partial name (e.g., `api-versioning`), or full directory name (e.g., `001-api-versioning`). Search `specs/` for a matching directory.
-   - If ambiguous, list matches and ask the user to choose.
-   - If no match, report: "Feature `{feature-part}` does not exist." List available features.
+5. Invoke `read-spec` (MCP: `gov-rt:read-spec`) against the resolved feature to load frontmatter, sections, and the open-question count from the body. The frontmatter status is one of draft, clarified, planned, in-progress, or done.
 
-3. Read `constitution.md` to load `govern` rules for the session. Subsequent commands reference specific §sections from this read — do not re-read the constitution unless the session is new.
+6. When a scenario was provided, locate the scenario file under the feature's scenarios subdirectory and read it: extract the section field from frontmatter (or the legacy spec-ref field for pre-017 scenarios) and capture the context summary from the body. If the scenario does not exist, list available scenarios and ask the user to choose. (Host responsibility — the runtime does not expose a scenario primitive; otherwise, fall back to the markdown-only path.)
 
-4. Determine which spec file exists: `spec.md` or `spec-and-plan.md`. **Recompute dependencies (safety net):** run `scripts/gen-spec-deps.sh --dry-run` against the target spec; if it reports a diff, run it for real to sync `dependencies:` from body inline links. Then parse the YAML frontmatter block at the top of the file and extract `status` and `dependencies`. Count open questions in the body's `## Open Questions` section. Count entries the same way `/writ:clarify` does: top-level list items or `**Bold-prefix**`-style headings; treat the section as having zero entries when it is missing, empty, or contains only a placeholder line such as `*None — all resolved.*`.
+7. Write the session JSON at its canonical path with the feature name, the repo-relative spec directory path, the scenario slug and scenario path when present (omit both fields when targeting a feature without a scenario — clears any previously set scenario), and the current ISO 8601 timestamp. The host applies tempfile + rename atomic-write semantics analogous to the runtime's write primitives. Otherwise (markdown-only path), the host writes through the same conventions directly.
 
-5. Check which artifacts exist: `spec.md` (or `spec-and-plan.md`), `plan.md`, `tasks.md`, `data-model.md`.
+8. Display the resolved target: feature name and current status, scenario detail when present, the artifacts list (which of spec.md, plan.md, tasks.md, and data-model.md exist), the dependency status from step 4, the open-question count, and the next pipeline step per the Status → next action table below.
 
-6. **Resolve scenario (if provided):**
-   - Check if `specs/{feature}/scenarios/` directory exists. If not, report: "No scenarios exist for this feature. Run `/writ:elaborate` to create one."
-   - List `.md` files in `specs/{feature}/scenarios/`.
-   - Match `{scenario-slug}` against filenames (without `.md` extension). If no match, list available scenarios and ask the user to choose.
-   - Read the scenario file: extract `spec-ref` from the YAML frontmatter and capture the context summary from the body's `## Context` section.
+## Status → next action
 
-7. Write `.claude/writ-session.json`:
+| Status | Open Questions | Next pipeline step |
+| --- | --- | --- |
+| draft | any | /writ:clarify |
+| clarified | 0 | /writ:plan |
+| planned | 0 | /writ:implement |
+| in-progress | 0 | /writ:implement |
+| done | any | confirm complete; run /writ:ask to record a scenario and reopen |
 
-   Feature-only target:
-
-   ```json
-   {
-     "feature": "{NNN-feature-name}",
-     "path": "specs/{NNN-feature-name}",
-     "setAt": "{ISO 8601 timestamp}"
-   }
-   ```
-
-   Feature + scenario target:
-
-   ```json
-   {
-     "feature": "{NNN-feature-name}",
-     "path": "specs/{NNN-feature-name}",
-     "scenario": "{scenario-slug}",
-     "scenarioPath": "specs/{NNN-feature-name}/scenarios/{scenario-slug}.md",
-     "setAt": "{ISO 8601 timestamp}"
-   }
-   ```
-
-   When targeting a feature without a scenario, omit the `scenario` and `scenarioPath` fields (clearing any previously set scenario).
-
-8. Display:
-   - Feature name and current status
-   - Scenario name, spec-ref, and context summary (if a scenario is targeted)
-   - Artifacts present
-   - Dependency status
-   - Open question count
-   - Next pipeline step (based on status and open-question count):
-     - **Recovery state — `(status ∈ {clarified, planned, in-progress}, open-question count ≥ 1)`** → `/writ:clarify` (the recovery path will surface the inconsistency before any forward action). This state usually arises from a manual frontmatter edit; the normal back-edge via `/writ:ask` keeps spec status and open-question presence in sync.
-     - `draft` → `/writ:clarify`
-     - `clarified` → `/writ:plan`
-     - `planned` → `/writ:implement`
-     - `in-progress` → `/writ:implement`
-     - `done` → confirm the spec is complete. To reopen it, run `/writ:elaborate` to add a scenario — that command performs the documented `done → in-progress` back-edge.
+When the status is clarified, planned, or in-progress AND the open-question count is at least one, the next step is `/writ:clarify` (recovery). This state usually arises from a manual frontmatter edit; the normal back-edge via `/writ:ask` keeps status and open-question presence in sync.
