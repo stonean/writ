@@ -9,8 +9,6 @@ writ.md
 .claude/*
 !.claude/commands/
 
-.mcp.json
-
 # govern derived views — non-markdown caches and indexes generated from specs.
 # Markdown artifacts (specs, plans, scenarios) stay in git as the source of truth;
 # binary or machine-only views regenerated from them do not. See constitution
@@ -30,20 +28,7 @@ writ.md
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings (keep commands tracked for project-wide access)
-.claude/*
-!.claude/commands/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
+.mcp.json
 
 # Go
 # If you prefer the allow list template instead of the deny list, see community template:
@@ -71,10 +56,3 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
-
-# env file
-# .env (already covered above)
-
-# Editor/IDE
-# .idea/ (already covered above)
-# .vscode/ (already covered above)
